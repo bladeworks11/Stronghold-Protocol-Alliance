@@ -125,7 +125,12 @@ test('DESIGN: every section is a `## N.` heading exactly once in docs/design/ or
   assert.equal(listed.size, where.size, 'the index names every section');
 });
 
-test('DESIGN: every "DESIGN §N" cited in the repository (code comments, tests, docs, data) is a heading of the design document', () => {
+// 本机自用: the scan enumerates files with `git ls-files`, so it needs a git checkout. This deployment copy has no
+// .git (and must not have one: the launcher's isGitRepo() would switch it to its git branch), so the check is skipped
+// rather than failed. Run it in a real checkout to get the coverage.
+const HAS_GIT = existsSync(join(ROOT, '.git'));
+
+test('DESIGN: every "DESIGN §N" cited in the repository (code comments, tests, docs, data) is a heading of the design document', { skip: !HAS_GIT && 'no .git: git ls-files is unavailable in this deployment copy' }, () => {
   const heads = new Set([...designText(ROOT).matchAll(/^#{2,4} (\d+(?:\.\d+)*)[. ]/gm)].map((m) => m[1]));
   const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8' })
     .split('\n').filter((f) => /\.(?:m?js|cjs|md|json|html|css|ya?ml|sh|bat|ps1|py|txt)$/.test(f) && !f.startsWith('test/golden/'));

@@ -107,6 +107,21 @@ const KIT_OWNED = [
  */
 const MODE_SPECIFIC = [/在集成战略中/];
 
+/**
+ * 本机自用例外: operators whose line a generic CONDITION would otherwise take over, but which a hand-written kit must
+ * own instead. Checked BEFORE the CONDITIONS loop — a clause can be understood generically and still belong to one
+ * operator's kit, and KIT_OWNED below cannot express that (it is only reached when no condition matches).
+ *
+ * 丰川祥子 char_4182_oblvns (a 自选 pick; put back into the pool by tools/build-data.mjs DIY_INCLUDED_COLLABS):
+ *   her module LOR-Y carries its `attack_speed` 12 straight on `trait.bb`, so `crowdInRange` reads
+ *   「攻击范围内存在2名及以上敌人时」 and would install the stat on HERSELF. The official line is
+ *   「攻击范围内干员攻击速度+12」 — her T2 毋畏遗忘's ally aura, i.e. an attack-speed buff for the operators in her range,
+ *   not for her. The engine rule would therefore buff the wrong unit. 仇白's LOR-Y (the same sentence) escapes this by
+ *   carrying the number on a NAMED talent, which this file does not read.
+ *   Her kit (ops/op-oblvns.js, not written yet) owns the ally aura; refused as 'kit' until then.
+ */
+const KIT_OWNED_CHARS = new Set(['char_4182_oblvns']);
+
 /** The buff key the engine rule installs (one per operator; `refresh:'keep'` so a check never extends its duration). */
 export const TRAIT_ASPD_BUFF = 'trait:attack_speed';
 
@@ -173,9 +188,11 @@ export function traitAttackSpeedRule(def) {
   if (!sources.length) return null;
   const value = num(sources[0].attack_speed);
   if (!value) return null;
+  const ownChar = KIT_OWNED_CHARS.has(def?.charId);
   for (const text of traitClauses(def)) {
     const clause = conditionClause(text);
     if (!clause) continue;
+    if (ownChar) return { value, condition: null, clause, source: text, reason: 'kit' };
     for (const match of CONDITIONS) {
       const condition = match(clause);
       if (condition) return { value, condition, clause, source: text, reason: 'ok' };

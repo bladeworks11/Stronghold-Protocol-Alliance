@@ -62,21 +62,27 @@ test('plan: audio.voiceJp is the JP dub (ArknightsAssets2 voice/) of the very sl
   assert.ok(plan({ voiceSlots: null }).audio.voiceJp.char_263_skadi.gacha);
 });
 
-test('data/assets.json: voiceJp gives every voiced operator the JP twin of each Chinese line (192 operators, 2688 files); stand-ins, 盟约·辅助干员 and summons have neither', () => {
+test('data/assets.json: voiceJp gives every voiced operator the JP twin of each Chinese line; stand-ins, 盟约·辅助干员 and summons have neither', () => {
   const m = readJson('data/assets.json');
   const cn = m.audio.voice;
   const jp = m.audio.voiceJp;
   assert.ok(jp && typeof jp === 'object', 'the manifest carries the JP tree');
-  assert.deepEqual(Object.keys(jp), Object.keys(cn), 'the same operators');
-  assert.equal(m.stats.voiceJpChars, Object.keys(jp).length);
-  assert.equal(m.stats.voiceChars, Object.keys(cn).length);
-  assert.equal(Object.keys(jp).length, 192);
-  // the JP tree is the Chinese one with the folder swapped: same slots, same lines in the same order, same file names
-  assert.deepEqual(JSON.parse(JSON.stringify(cn).replaceAll('/assets/audio/voice/cn/', '/assets/audio/voice/jp/')), jp);
+  // 本机自用: the JP tree is a SUPERSET of the CN one, not the same set. 5 of the 7 联动 picks (灰烬, 艾拉, 玛露西尔,
+  // 丰川祥子, 结城理) have a Japanese dub only — the mirror's CN tree carries no lines for them — so they are planned
+  // into `voiceJp` and not into `voice`. Everything upstream's rule still needs: no CN operator lacks a JP tree, and for
+  // the operators both trees carry, the JP one is the CN one with the folder swapped.
+  const cnIds = Object.keys(cn), jpIds = Object.keys(jp);
+  assert.deepEqual(cnIds.filter((id) => !jpIds.includes(id)), [], 'every CN-voiced operator has its JP tree');
+  assert.ok(jpIds.length >= cnIds.length, `${jpIds.length} JP trees for ${cnIds.length} CN ones`);
+  assert.equal(m.stats.voiceJpChars, jpIds.length);
+  assert.equal(m.stats.voiceChars, cnIds.length);
+  const shared = Object.fromEntries(Object.entries(cn));
+  assert.deepEqual(JSON.parse(JSON.stringify(shared).replaceAll('/assets/audio/voice/cn/', '/assets/audio/voice/jp/')),
+    Object.fromEntries(Object.entries(jp).filter(([id]) => cn[id])), 'the shared operators are twins');
+  assert.ok(jpIds.length - cnIds.length === 5, `${jpIds.length - cnIds.length} JP-only operators (the 联动 picks)`);
   const lines = [];
   const walk = (x) => { if (typeof x === 'string') lines.push(x); else if (Array.isArray(x)) x.forEach(walk); else if (x && typeof x === 'object') Object.values(x).forEach(walk); };
   walk(jp);
-  assert.equal(lines.length, 2688);
   for (const u of lines) assert.match(u, /^\/assets\/audio\/voice\/jp\/char_[^/]+\/cn_\d+\.mp3$/);
   // no voice: the 17 stand-ins of data/backups.json (预备干员 / 原型干员), the mode's 盟约·辅助干员, every summon
   const backups = readJson('data/backups.json');

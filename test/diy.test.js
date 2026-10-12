@@ -21,7 +21,8 @@ const DATA = { chess, backups };
 const { ownedPool, prototypes } = backups.diy;
 const ELITES = ['char_608_acpion', 'char_609_acguad', 'char_610_acfend', 'char_611_acnipe', 'char_612_accast', 'char_613_acmedc', 'char_614_acsupo', 'char_615_acspec', 'char_617_sharp2'];
 const RESERVES5 = ['char_601_cguard', 'char_602_cdfend', 'char_603_csnipe', 'char_604_ccast', 'char_605_cmedic', 'char_606_csuppo'];
-const COLLAB = ['char_456_ash', 'char_1029_yato2', 'char_4123_ela', 'char_4141_marcil', 'char_4182_oblvns', 'char_4217_makoto'];
+// 本机自用: the 7 联动 picks DIY_INCLUDED_COLLABS puts back into the pool (tools/build-data.mjs).
+const COLLAB = ['char_456_ash', 'char_1029_yato2', 'char_1048_orchd2', 'char_4123_ela', 'char_4141_marcil', 'char_4182_oblvns', 'char_4217_makoto'];
 const SIEGE = 'char_112_siege';
 const T5 = 'chess_char_5_diy1_a', T5B = 'chess_char_5_diy2_a', T6 = 'chess_char_6_diy1_a', T6B = 'chess_char_6_diy2_a';
 
@@ -35,22 +36,24 @@ test('slots: two per tier (5, 6), each with its elite twin', () => {
   assert.equal(diyTokenOwner(SIEGE, chess.chess_char_6_diy1_b.status), 'char_112_siege@2/60/7/3');
 });
 
-test('diyPool: tier 5 = 15 prototypes + 72 owned 6★, tier 6 = 9 + 72; no preset, no collab; with the kit registry only kitted operators', () => {
+test('diyPool: tier 5 = 15 prototypes + 79 owned 6★, tier 6 = 9 + 79; every pick is a legal pick; with the kit registry only kitted operators', () => {
   const p5 = diyPool(5, { data: DATA }), p6 = diyPool(6, { data: DATA });
   assert.deepEqual(p5, [...RESERVES5, ...ELITES, ...ownedPool]);
   assert.deepEqual(p6, [...ELITES, ...ownedPool]);
-  assert.deepEqual([p5.length, p6.length], [87, 81]);
+  // 本机自用: the 7 联动 picks are in the pool, so tier 5 is 15 + 79 and tier 6 is 9 + 79.
+  assert.deepEqual([p5.length, p6.length], [94, 88]);
   const roster = new Set(Object.values(chess).map((c) => c.charId).filter(Boolean));
-  for (const id of p5) assert.ok(!roster.has(id) && !COLLAB.includes(id), id);
+  for (const id of p5) assert.ok(!roster.has(id), `${id}: no preset operator is a pick`);
+  for (const id of COLLAB) assert.ok(p5.includes(id) && p6.includes(id), `${id}: the 联动 picks are offered at both tiers`);
   assert.deepEqual(diyPool(4, { data: DATA }), [], 'no 自选 slot at tier 4');
   // the kit registry: the 预备干员 run the generic kit (exact for their skills), the nine elites their stand-in kits, the
-  // owned 6★ only with an operator kit file (kits/index.js OPERATOR_KIT_FILES), in pool order
+  // owned 6★ only with an operator kit file (kits/index.js OPERATOR_KIT_FILES) — plus this checkout's LOCAL_COLLAB_CHARS
   assert.deepEqual(GENERIC_KIT_CHARS.filter((id) => prototypes['5'].includes(id)), RESERVES5);
   for (const id of ELITES) assert.equal(typeof STANDIN_KITS[id], 'function', `${id}: stand-in kit`);
   const ops = ownedPool.filter((id) => typeof OPERATOR_KITS[id] === 'function');
   assert.deepEqual([...ops].sort(), Object.keys(OPERATOR_KITS).sort(), 'every operator kit is an owned-6★ pick');
-  assert.deepEqual(diyPool(5, { data: DATA, kitted: KITTED_CHARS }), [...RESERVES5, ...ELITES, ...ops]);
-  assert.deepEqual(diyPool(6, { data: DATA, kitted: KITTED_CHARS }), [...ELITES, ...ops]);
+  assert.deepEqual(diyPool(5, { data: DATA, kitted: KITTED_CHARS }), [...RESERVES5, ...ELITES, ...ownedPool.filter((id) => KITTED_CHARS.includes(id))]);
+  assert.deepEqual(diyPool(6, { data: DATA, kitted: KITTED_CHARS }), [...ELITES, ...ownedPool.filter((id) => KITTED_CHARS.includes(id))]);
   assert.deepEqual(diyPool(6, { data: DATA, kitted: (id) => id === SIEGE }), [SIEGE], 'a predicate works too');
   assert.deepEqual(diyPool(5, { data: DATA, kitted: [] }), [], 'nothing kitted, nothing offered');
 });
@@ -95,7 +98,6 @@ test('checkDiyPick: an owned 6★ chooses any of its 3 skills and any module of 
     [T5, { charId: 'char_607_cspec' }, /not a tier-5/],
     [T5, { charId: 'char_102_texas', skillIndex: 0 }, /not a tier-5/],
     [T6, { charId: 'char_1012_skadi2', skillIndex: 0 }, /not a tier-6/],
-    [T5, { charId: 'char_456_ash', skillIndex: 0 }, /not a tier-5/],
     [T5, null, /bad pick/],
     [T5, { charId: 42 }, /bad pick/],
     ['chess_char_5_01_a', { charId: SIEGE, skillIndex: 0 }, /not a 自选 slot/],

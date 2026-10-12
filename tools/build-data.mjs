@@ -1178,6 +1178,22 @@ const DIY_EXCLUDED_TEAMS = Object.freeze(['rainbow', 'action4', 'mujica', 'sees'
 const DIY_EXCLUDED_NUMBER_PREFIXES = Object.freeze(['MH', 'RS', 'AM', 'PS', 'DD']);
 
 /**
+ * 本机自用改动（非上游）：把 7 名联动 6★ 放回自选池，让它们在 自选编队 里可选。
+ * 上游因版权把它们排除（见上面两段注释与 NOTICE.md 第 2 节）；这个改动仅供本机个人非商业使用，
+ * 不要连同联动干员一起公开分发，也不要向上游提 PR。
+ * 要还原：清空这个数组并重建 data/ 即可。
+ */
+const DIY_INCLUDED_COLLABS = Object.freeze([
+  'char_456_ash',       // 灰烬 (彩虹六号)
+  'char_4123_ela',      // 艾拉 (彩虹六号)
+  'char_1029_yato2',    // 麒麟R夜刀 (怪物猎人)
+  'char_1048_orchd2',   // 焰狐龙梓兰 (怪物猎人)
+  'char_4141_marcil',   // 玛露西尔 (迷宫饭)
+  'char_4182_oblvns',   // 丰川祥子 (Ave Mujica)
+  'char_4217_makoto',   // 结城理 (Persona)
+]);
+
+/**
  * The skill a prototype carries in a 自选 slot when no 补位 row of the slot's tier names it (only 预备干员-医疗 at tier 5:
  * it stands in at tier 3 only). PRTS 卫戍协议 says the prototypes' "技能携带规则与系统补位时一致"; [ASSUMED] (the owner's
  * decision of 2026-10-05) the selection of its 补位 rows at that tier, and for this one S3 — every other 4★ reserve's
@@ -1366,7 +1382,8 @@ function buildBackups(ctx, chess) {
       && !ch.isNotObtainable && !roster.has(id);
   }).sort(naturalCmp);
   const collabNumber = (ch) => DIY_EXCLUDED_NUMBER_PREFIXES.some((p) => new RegExp(`^${p}\\d`).test(ch.displayNumber || ''));
-  const excluded = legal6.filter((id) => teamsOf(charTable[id]).some((t) => excludedTeams.has(t)) || collabNumber(charTable[id]));
+  const excluded = legal6.filter((id) => (teamsOf(charTable[id]).some((t) => excludedTeams.has(t)) || collabNumber(charTable[id]))
+    && !DIY_INCLUDED_COLLABS.includes(id));
   for (const t of DIY_EXCLUDED_TEAMS) if (!excluded.some((id) => teamsOf(charTable[id]).includes(t))) warn(`DIY_EXCLUDED_TEAMS: no owned-6★ pick of team ${t}`);
   const ownedPool = legal6.filter((id) => !excluded.includes(id));
   for (const id of ownedPool) for (const st of diyStatuses.values()) addNeed(id, st);
@@ -3572,8 +3589,13 @@ function buildConfig(ctx, waves, stages, bands, chess, items) {
   }));
   const chessStock = stockByName(chess, { 普罗旺斯: 10, 德克萨斯: 10, 跃跃: 10, 古米: 10, 格雷伊: 10,
     风丸: 8, 赫默: 12, 休谟斯: 12, 砾: 12, 蒂比: 12, 调香师: 12 });
+  // 变形同构体 is the only equipment handed out by traits and strategies — 缪尔赛思's garrison_76 (1 normal / 2 elite) and
+  // band 变形者集群 at R5 / R10 / R15 — and an earlier release keeps every copy (it never merges, is never sold and is
+  // never consumed). The tier VI count of the measured table is 3 (DESIGN §29.8), so the operator's own trait and the
+  // strategy ran into that shop cap mid-match and were dropped silently; the elite's order of two failed whole while two
+  // copies were already held. The override only raises this one item: 变形同构体 = 9.
   const itemStock = stockByName(items, { 简易通讯机: 5, 蜂鸣器: 6, 防暴盾: 6, 浓缩嗅盐: 6,
-    寻呼模块: 7, 伪装服: 7, 拉特兰桥夹: 7, 商业包装方案: 2 });
+    寻呼模块: 7, 伪装服: 7, 拉特兰桥夹: 7, 商业包装方案: 2, 变形同构体: 9 });
   const addendum = ctx.research.core?._criticAddendum || {};
   const multipliers = addendum.enemyStatMultipliers || DEFAULT_ENEMY_MULTIPLIERS;
   if (!addendum.enemyStatMultipliers) warn('config: using built-in enemy multiplier table (research 01 _criticAddendum missing)');

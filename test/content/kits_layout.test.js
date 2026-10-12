@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { KIT_FILES, TIER_KITS, KITS, STANDIN_KIT_FILES, STANDIN_KITS, OPERATOR_KIT_FILES, OPERATOR_KITS, GENERIC_KIT_CHARS, KITTED_CHARS } from '../../server/sim/content/kits/index.js';
+import { KIT_FILES, TIER_KITS, KITS, STANDIN_KIT_FILES, STANDIN_KITS, OPERATOR_KIT_FILES, OPERATOR_KITS, GENERIC_KIT_CHARS, KITTED_CHARS, LOCAL_COLLAB_CHARS } from '../../server/sim/content/kits/index.js';
 import { KITS as CONTENT_KITS } from '../../server/sim/content/index.js';
 import { diyRecord } from '../../shared/diy.js';
 import { normalizeChess } from '../../server/sim/simdata.js';
@@ -67,7 +67,9 @@ test('a 自选 kit file op-<codename>.js registers the kit of that owned-6★ pi
       }
     }
   }
-  assert.deepEqual([...KITTED_CHARS].sort(), [...new Set([...GENERIC_KIT_CHARS, ...Object.keys(STANDIN_KITS), ...Object.keys(OPERATOR_KITS)])].sort());
+  // 本机自用：LOCAL_COLLAB_CHARS 的 7 名联动干员也在 KITTED_CHARS 里（上游按版权排除，见 kits/index.js）。
+  assert.deepEqual([...KITTED_CHARS].sort(),
+    [...new Set([...GENERIC_KIT_CHARS, ...Object.keys(STANDIN_KITS), ...Object.keys(OPERATOR_KITS), ...LOCAL_COLLAB_CHARS])].sort());
 });
 
 test('a kit file <chessId>-<codename>.js registers the kit of <chessId>_a (codename: its charId without char_<n>_)', async () => {

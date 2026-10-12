@@ -916,8 +916,13 @@ test('干员战斗语音 (DESIGN §21.30): the manifest data, the official prior
   assert.match(doc('docs/ASSETS.md'), /\| 干员战斗语音 \|/);
   assert.match(doc('docs/ASSETS.md'), /voiceChars/);
   // 0.2.2: the Japanese dub beside the Chinese one (audio.voiceJp, settings 语音语言, the full zip's switch)
-  assert.equal(Object.keys(manifest.audio?.voiceJp ?? {}).length, charIds.length, 'every voiced operator has its JP tree');
-  assert.equal(manifest.stats.voiceJpChars, charIds.length);
+  // 本机自用: the JP tree is a SUPERSET of the CN one, not the same set — 5 of the 7 联动 picks (灰烬, 艾拉, 玛露西尔,
+  // 丰川祥子, 结城理) have a JP dub only; the mirror's CN tree carries no lines for them, so `voiceJp` is planned for
+  // every voiced operator while `voice` is not.
+  const jpIds = Object.keys(manifest.audio?.voiceJp ?? {});
+  assert.deepEqual(charIds.filter((id) => !jpIds.includes(id)), [], 'every CN-voiced operator has its JP tree');
+  assert.ok(jpIds.length >= charIds.length, `${jpIds.length} JP trees for ${charIds.length} CN ones`);
+  assert.equal(manifest.stats.voiceJpChars, jpIds.length);
   assert.match(doc('docs/ASSETS.md'), /voiceJp: \{ \[charId\]: \{ …the slots of `voice` \} \}/);
   assert.match(doc('docs/DEPLOY.md'), /`FULL_ZIP_JP_VOICE` 改成 `false` 时/);
   assert.match(PLAYING, /「语音语言」选 \*\*中文 \/ 日本語\*\*（默认中文，和界面语言无关/);

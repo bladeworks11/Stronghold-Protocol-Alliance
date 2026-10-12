@@ -151,6 +151,14 @@ export const OPERATOR_KIT_FILES = Object.freeze([
   'op-kalts2.js',
   'op-monstr.js',
   'op-clemnt.js',
+  // 本机自用的联动干员（见 LOCAL_COLLAB_CHARS）
+  'op-ash.js',
+  'op-ela.js',
+  'op-yato2.js',
+  'op-marcil.js',
+  'op-orchd2.js',
+  'op-oblvns.js',
+  'op-makoto.js',
 ]);
 
 /**
@@ -190,8 +198,25 @@ export const OPERATOR_KITS = Object.freeze(Object.assign({}, ...OPERATOR_MODULES
 export const KITS = Object.freeze(Object.assign({}, ...TIER_KITS, STANDIN_KITS, OPERATOR_KITS));
 
 /**
+ * 本机自用改动（非上游）：7 名联动 6★，让 自选编队 的列表能列出它们（welcome.diyKitted / diyPool）。
+ * 它们的战斗逻辑按每个干员自己的 op-<codename>.js 解析（content/index.js kitOf 按 charId 查 KITS）；
+ * 还没写 kit 的那些回落到 generic kit —— 技能按官方黑板数值发动，但天赋与模组效果与官方不一致。
+ * 写一个 op-<codename>.js 并加进 OPERATOR_KIT_FILES 后，就会改用那份 kit，不必再改这里。
+ * 上游的对应名单见 GENERIC_KIT_CHARS（预备干员）与 OPERATOR_KITS（已实装的 6★）。
+ */
+export const LOCAL_COLLAB_CHARS = Object.freeze([
+  'char_456_ash',       // 灰烬 (彩虹六号)
+  'char_4123_ela',      // 艾拉 (彩虹六号)
+  'char_1029_yato2',    // 麒麟R夜刀 (怪物猎人)
+  'char_1048_orchd2',   // 焰狐龙梓兰 (怪物猎人)
+  'char_4141_marcil',   // 玛露西尔 (迷宫饭)
+  'char_4182_oblvns',   // 丰川祥子 (Ave Mujica)
+  'char_4217_makoto',   // 结城理 (Persona)
+]);
+
+/**
  * Every character a 自选 pick may field with a faithful kit: the 预备干员 (GENERIC_KIT_CHARS), the stand-ins with a kit
  * file and the operators of OPERATOR_KIT_FILES whose file loaded. The `kitted` option of shared/diy.js diyPool /
- * validateDiyPicks.
+ * validateDiyPicks. LOCAL_COLLAB_CHARS is this checkout's own addition (see above).
  */
-export const KITTED_CHARS = Object.freeze([...new Set([...GENERIC_KIT_CHARS, ...Object.keys(STANDIN_KITS), ...Object.keys(OPERATOR_KITS)])]);
+export const KITTED_CHARS = Object.freeze([...new Set([...GENERIC_KIT_CHARS, ...Object.keys(STANDIN_KITS), ...Object.keys(OPERATOR_KITS), ...LOCAL_COLLAB_CHARS])]);

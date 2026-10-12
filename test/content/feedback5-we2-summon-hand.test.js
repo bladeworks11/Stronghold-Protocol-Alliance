@@ -35,6 +35,9 @@ function official(charId, mod, stage) {
     case 'char_179_cgbird': return 3;                                                      // PRTS 幻影 备注
     case 'char_2027_wang': return mod === 'uniequip_002_wang' ? 8 : 7;                     // 7 at full potential, TRP-X +1
     case 'char_4048_doroth': return 9;                                                     // 10 / 13, the hand's 9 cap
+    // 本机自用: 艾拉's 雷鸣地雷 (a 联动 pick DIY_INCLUDED_COLLABS puts back). PRTS 天赋1 备注 "陷阱部署上限与最多拥有数量
+    // 相同" and 潜能3 「第一天赋效果增强」 (4 最多拥有 at full potential) ⇒ the hand gets 4; Δ模组 does not change it.
+    case 'char_4123_ela': return 4;
     default: return 1;
   }
 }

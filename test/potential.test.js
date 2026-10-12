@@ -102,7 +102,8 @@ test('every chess and 自选 form at every potential: the raw keyframes plus the
       forms++;
     }
   }
-  assert.equal(forms, 259);
+  // 本机自用: the 7 联动 picks add 21 forms (3 statuses each) to the upstream 259.
+  assert.equal(forms, 280);
 });
 
 test('talent candidates at every potential: each talent is the last one unlocked with requiredPotentialRank ≤ the rank', { skip: !HAS_CACHE && 'no .cache/gamedata' }, () => {

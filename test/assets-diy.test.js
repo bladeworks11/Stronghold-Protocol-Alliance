@@ -111,17 +111,16 @@ test('the committed data/assets.json lists every 自选 operator\'s avatar, port
   assert.equal(m.stats.modules, Object.keys(m.modules).length);
 });
 
-test('an operator left out of 自选 (data/backups.json diy.excluded: the collab picks, 焰狐龙梓兰 MH05 among them) keeps no art in data/assets.json, so the full release zip (tools/package.mjs) never ships it', () => {
+// 本机自用: upstream this test locks the opposite — an operator in `diy.excluded` (the collab picks) keeps NO art, so the
+// release zip never ships it. DIY_INCLUDED_COLLABS puts those operators back in the pool, so their art is deliberately
+// fetched and shipped here, and `diy.excluded` is empty. What still has to hold is the invariant the test exists for:
+// every 自选 pick has art, and the manifest's counters match its own contents.
+test('every operator in the 自选 pool carries art in data/assets.json (本机: the 联动 picks are in the pool, so theirs ships too)', () => {
   const m = load('assets');
-  const text = JSON.stringify(m);
-  assert.ok(BACKUPS.diy.excluded.includes('char_1048_orchd2'), '焰狐龙梓兰 is excluded');
-  for (const id of BACKUPS.diy.excluded) {
-    const code = id.split('_').slice(2).join('_');
-    assert.equal(m.chars[id], undefined, `${id}: chars`);
-    assert.equal(m.audio.sfx.units[id], undefined, `${id}: unit sfx`);
-    assert.equal(m.audio.voice?.[id], undefined, `${id}: voice`);
-    assert.ok(!Object.keys(m.skills).some((k) => k.startsWith(`skchr_${code}_`)), `${id}: skill icons`);
-    assert.ok(!text.includes(id), `${id}: no file of theirs`);
+  assert.deepEqual(BACKUPS.diy.excluded, [], '本机: nothing is excluded from 自选');
+  for (const id of ['char_1048_orchd2', 'char_456_ash', 'char_4123_ela', 'char_1029_yato2', 'char_4141_marcil', 'char_4182_oblvns', 'char_4217_makoto']) {
+    assert.ok(m.chars[id], `${id}: chars (the 联动 picks now ship their art)`);
+    assert.ok(m.audio.sfx.units[id], `${id}: unit sfx`);
   }
   assert.equal(m.stats.chars, Object.keys(m.chars).length);
   assert.equal(m.stats.skills, Object.keys(m.skills).length);

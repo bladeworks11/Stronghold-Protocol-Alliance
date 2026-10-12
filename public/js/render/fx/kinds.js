@@ -17,6 +17,10 @@ export const FX_KINDS = Object.freeze({
   frostNova: { a: 'blast', c: 0x9fe6ff, smoke: 0x1c2630 }, sunBurst: { a: 'blast', c: 0xffe28a }, meltdown: { a: 'blast', c: 0xff5a2a, r: 1.5, heavy: true },
   iceSpike: { a: 'blast', c: 0xbfeeff, smoke: 0x1c2630 }, rockfall: { a: 'blast', c: 0xc8a878, smoke: 0x4a3f33 }, rockslide: { a: 'blast', c: 0xc8a878, smoke: 0x4a3f33 },
   finale: { a: 'blast', c: 0xffd45a, r: 1.5 }, swordStorm: { a: 'blast', c: 0xdfe8ff }, swordRain: { a: 'blast', c: 0xdfe8ff }, liberate: { a: 'blast', c: 0xffffff },
+  // 本机自用: 麒麟R夜刀 S2 乱舞 的斩击圈（ops/op-yato2.js）— the red-white arc of her 双刀.
+  dance: { a: 'blast', c: 0xffd0d0 },
+  // 本机自用: 丰川祥子 的 Fever 开场（ops/op-oblvns.js；`ba.fever` 累计至 450 点时的 20 秒窗口）— a stage-wide pulse.
+  fever: { a: 'zone', c: 0xd06ad0, dur: 2, r: 2 },
   // 赤刃明霄陈 S3 赤霄·天喟 的龙剑气: a travelling blade, drawn from the sim's per-interval `chen3Wave` events (its own
   // position + the previous point + direction); `pt` because it is not at the caster (it roams and passes by her tile)
   chen3Wave: { a: 'qi', c: 0xdfe8ff, pt: true },

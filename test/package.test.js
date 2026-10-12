@@ -75,7 +75,12 @@ test('refusal list: 0.1.x\'s entries and what 0.2.0 leaves out, at the path or u
   for (const p of ['server/index.js', 'docs/research/03-operators.json', 'testing.md', 'public/js/review.js']) assert.ok(!isRefused(p), p);
 });
 
-test('the real tracked tree: runtime in, the rest out; every shipped import, npm entry point, research table and spawned tool ships', () => {
+// 本机自用: the packaging plan enumerates files with `git ls-files`, so this needs a git checkout. This deployment copy
+// has no .git (and must not have one: the launcher's isGitRepo() would switch it to its git branch), so it is skipped
+// rather than failed. Run it in a real checkout to get the coverage.
+const HAS_GIT = fs.existsSync(path.join(ROOT, '.git'));
+
+test('the real tracked tree: runtime in, the rest out; every shipped import, npm entry point, research table and spawned tool ships', { skip: !HAS_GIT && 'no .git: git ls-files is unavailable in this deployment copy' }, () => {
   const p = plan(ROOT, { lite: true, allowDirty: true, scan: false, measure: false });
   assert.deepEqual(p.problems, []);
   const got = new Set(p.files);

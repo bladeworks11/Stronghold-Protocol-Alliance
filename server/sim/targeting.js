@@ -190,6 +190,9 @@ const PRIORITY_FNS = {
   // 攻城手 trait "优先攻击重量最重的敌人" (早露 / 提丰: kits/ops/op-poca.js, op-typhon.js): the highest current 重量等级
   // (Unit.weight: massLevel with 失重 etc.) first, the usual order after that
   heaviest: (e) => -e.weight,
+  // 本机自用新增: "优先攻击受到雷鸣地雷效果影响的敌人" — 艾拉 S3 “博萨克风暴” (ops/op-ela.js, a 联动 operator put back
+  // into the 自选 pool by tools/build-data.mjs DIY_INCLUDED_COLLABS). An enemy carrying that module's marker first.
+  marked: (e) => (e.findBuff && e.findBuff('ela:grzmot') ? 0 : 1),
 };
 
 /**
