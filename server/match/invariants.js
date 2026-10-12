@@ -225,7 +225,10 @@ export function collectViolations(m, { limit = 25 } = {}) {
   }
   // a copy the pool never issued, held by a group that has no such entry: caught above through gh vs pool.has
 
-  // Shared shop equipment, per group. The chess pool above may go negative (Mimic). Item stock may not: held ≤ cap.
+  // Shared shop equipment, per fixed group (server/match/pool.js createPoolGroups). The chess pool above may go
+  // negative (Mimic). Fixed operator gifts may overdraw equipment stock too — ownership still counts and keeps shop
+  // availability at zero, but exhaustion never blocks the gift (upstream §30.1, GameData.isUnlimitedGiftItem); every
+  // other item family retains its cap.
   const itemPools = Array.isArray(m.poolGroups) && m.poolGroups.length
     ? m.poolGroups.map((g) => g.itemPool)
     : (m.itemPool ? [m.itemPool] : []);
@@ -236,7 +239,7 @@ export function collectViolations(m, { limit = 25 } = {}) {
       const cap = ip.cap(id);
       if (!Number.isInteger(cap)) continue;
       const h = ip.held(id);
-      if (h > cap) fail(`item ${id}: held ${h} > cap ${cap}`);
+      if (h > cap && !gd.isUnlimitedGiftItem(id)) fail(`item ${id}: held ${h} > cap ${cap}`);
     }
   }
 

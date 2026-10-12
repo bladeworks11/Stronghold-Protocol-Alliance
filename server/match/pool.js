@@ -6,7 +6,8 @@
 //     (config.economy.poolCopies[tier], measured identity overrides; co-op shared stock doubled). `left` is the
 //     signed capacity minus occupation; the public left() and shop sampling clamp a deficit to zero.
 //   * Owning a piece takes copies: a normal piece holds 1, an elite holds 3 (merge of 3 normals). Shop displays
-//     do NOT reserve copies; buying fails (SOLD_OUT) when left = 0.
+//     do NOT reserve copies. An item buy fails (SOLD_OUT) when left = 0; an operator card already shown in the shop or a
+//     reward can still be taken and overdraws (a negative raw left, the debt — GitHub #498, the owner's decision).
 //   * Pieces remember how many copies they hold (`piece.poolCopies`), so selling / elimination / temp wipes return
 //     exactly what was taken — chess granted by effects while the pool is empty (or hidden/banned chess) hold 0.
 //   * Invariant: raw left ≤ cap and raw left + Σ held copies == cap. Mimic can exceed stock, but its copies still occupy it.
@@ -14,8 +15,9 @@
 // Rolls: each chess slot draws ONE copy uniformly from all remaining copies of eligible chess with tier ≤ shop level
 // ("copy-weighted"; duplicates within a roll allowed). The item slot picks a tier with the same tier shares, then a
 // uniform shop-eligible item of that tier (falling back to lower tiers). A roll may add entries outside the pool
-// (`extra`, after its own): one player's 自选 stock (0.2.0, player/diy.js diyRollEntries) — weighted by its copies like
-// any chess, drawn by that player's shop only.
+// (`extra`, after its own): one player's 自选 stock — the ordinary shop passes diyRollEntries (the shopLevel gate);
+// the promotion reward and random grants pass diyStockEntries (the roll's own tier, DESIGN §30.23). Weighted by its
+// copies like any chess, drawn by that player only.
 
 import { poolGroupSizes, poolCopyScale } from '../../shared/playerCapacity.js';
 
@@ -225,10 +227,8 @@ export class SharedPool {
  * experiment BV1eLXXBqEgF, 1:30 and 2:30. [ASSUMED] An item that is consumed/destroyed or removed by elimination no
  * longer occupies stock, consistently with the video's ownership model; this is not a per-match purchase limit.
  *
- * The stock is the SHOP's limit: what a purchase, a reward pick or a choice card hands out, and what those copies keep
- * occupying. Equipment an EFFECT hands out (a 特质, a strategy, a bond, an item) is not limited by it and does not
- * occupy it (`piece.stockCost` 0, acquireItem's `noStock`): 缪尔赛思's 变形同构体 and 诗怀雅's 盟约之币 have no cap
- * (the user's decision of 2026-10-12 — the tier-VI stock of three silently dropped the trait's own grant). */
+ * The fixed operator gifts (§30.1, GameData.isUnlimitedGiftItem) may overdraw the cap: they still count here, but
+ * exhaustion never blocks the gift itself (acquireItem's `requirePool:false`). */
 export class SharedItemPool {
   constructor(gd, players, { scale = 1 } = {}) {
     this.gd = gd;
@@ -240,25 +240,13 @@ export class SharedItemPool {
     return cap == null ? null : Math.ceil(cap * this.scale);
   }
   need(id) { return this.gd.isGolden(id) ? 2 : 1; }
-  /**
-   * Shared stock one OWNED item piece occupies. A copy the shop handed out carries its own cost (`piece.stockCost`, a
-   * normal 1 / a golden 2), and a merge or a 整备 upgrade adds the copies it consumed, so a merged golden never
-   * conjures stock; an effect-granted copy carries 0. A piece without a mark (an older state object, a hand-built
-   * test piece) counts as `need`.
-   * @param {{ id: string, stockCost?: number }} piece
-   */
-  pieceCost(piece) {
-    if (!piece) return 0;
-    const c = piece.stockCost;
-    return Number.isInteger(c) && c >= 0 ? c : this.need(piece.id);
-  }
   held(id) {
     const base = this.gd.baseIdOf(id);
     let count = 0;
     const see = p => {
       if (!p) return;
-      if (p.kind === 'item' && this.gd.baseIdOf(p.id) === base) count += this.pieceCost(p);
-      for (const item of p.items || []) if (this.gd.baseIdOf(item.id) === base) count += this.pieceCost(item);
+      if (p.kind === 'item' && this.gd.baseIdOf(p.id) === base) count += this.need(p.id);
+      for (const item of p.items || []) if (this.gd.baseIdOf(item.id) === base) count += this.need(item.id);
     };
     for (const ps of this.players()) {
       for (const p of ps.hand) see(p);
@@ -270,11 +258,9 @@ export class SharedItemPool {
   left(id) { const cap = this.cap(id); return cap == null ? Infinity : Math.max(0, cap - this.held(id)); }
   canGain(id) { return this.left(id) >= this.need(id); }
   /** Stock gates eligibility, not probability: retain the existing uniform item draw or explicit data weights.
-   * The measured stock table alone does not establish shop probabilities.
-   * `ignoreStock` (an effect's own draw: a trait's 定制品, a strategy's random equipment) skips the gate — the grant is
-   * uncapped and takes no stock anyway (acquireItem's `noStock`). */
-  pick(rng, ids, weights = null, { ignoreStock = false } = {}) {
-    const list = [...new Set(ids)].filter(id => ignoreStock || this.canGain(id));
+   * The measured stock table alone does not establish shop probabilities. */
+  pick(rng, ids, weights = null) {
+    const list = [...new Set(ids)].filter(id => this.canGain(id));
     const pairs = list.map(id => [id, weights ? Math.max(0, Number(weights.get(id)) || 0) : 1]);
     const total = pairs.reduce((n, p) => n + Math.max(0, p[1]), 0);
     if (!(total > 0)) return null;

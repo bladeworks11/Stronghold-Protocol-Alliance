@@ -3516,11 +3516,11 @@ function buildChoices(ctx, effects, items, chess) {
       // weights are server-side (PRTS 11-25 note: "装备【灼燃维式重锤】的出现概率调整") — uniform [ASSUMED]
       pool_equip_vict: { kind: 'equip', items: ['灼燃维式重锤', '坚固维式重锤', '加速维式重锤', '战栗维式重锤'].map(itemByName), assumed: true },
       pool_equip_pepe: { kind: 'equip', weighted: [['盟约之币', 45], ['萨尔贡浓茶', 45], ['黄沙罗盘', 10]].map(([n, w]) => [itemByName(n), w]), goldenWeights: [40, 40, 20], assumed: true },
-      // 洛洛的定制品 = the same 4 special hammers (user playtest #4, first-hand: "几个特殊的维式重锤是干员洛洛或者维多利亚
-      // 阵营获得的"); uniform [ASSUMED]
-      pool_equip_rockr: { kind: 'equip', items: ['灼燃维式重锤', '坚固维式重锤', '加速维式重锤', '战栗维式重锤'].map(itemByName), assumed: true },
+      // 路标月报#2 BV1eLXXBqEgF, card-pool rule 6: measured subset weights. The four special hammers are still
+      // exclusive to this and Victoria's pools, but are not the whole of Rockrock's pool.
+      pool_equip_rockr: { kind: 'equip', weighted: [['维式重锤', 10], ['战栗维式重锤', 2], ['坚固维式重锤', 2], ['加速维式重锤', 2], ['灼燃维式重锤', 2], ['有限加速器', 1], ['护盾无人机', 4], ['激光发射器', 4]].map(([n, w]) => [itemByName(n), w]), assumed: true },
       pool_chess_glady: { kind: 'chess', items: ['斯卡蒂', '幽灵鲨', '深巡'].map(chessByName), assumed: true },
-      pool_char_pinus: { kind: 'chess', weighted: [['野鬃', 45], ['灰毫', 45], ['远牙', 10]].map(([n, w]) => [chessByName(n), w]), assumed: true },
+      pool_char_pinus: { kind: 'chess', weighted: [['野鬃', 10], ['灰毫', 10], ['远牙', 3]].map(([n, w]) => [chessByName(n), w]), assumed: true },
       pool_char_later: { kind: 'chess', bond: 'lateranoShip', minTier: 4, golden: true, rule: 'shopEligible', assumed: true },
       ...Object.fromEntries([1, 2, 3, 4, 5, 6].map((t) => [`pool_chess_shop_${t}_reward`, { kind: 'chess', tier: t, rule: 'shopEligible', assumed: true }])),
     },
@@ -3589,12 +3589,10 @@ function buildConfig(ctx, waves, stages, bands, chess, items) {
   }));
   const chessStock = stockByName(chess, { 普罗旺斯: 10, 德克萨斯: 10, 跃跃: 10, 古米: 10, 格雷伊: 10,
     风丸: 8, 赫默: 12, 休谟斯: 12, 砾: 12, 蒂比: 12, 调香师: 12 });
-  // 变形同构体 is handed out by 缪尔赛思's trait (garrison_76: 1 normal / 2 elite) and band 变形者集群 at R5 / R10 / R15,
-  // and an earlier release keeps every copy (it never merges, is never sold and is never consumed). Its SHOP stock is
-  // the measured tier VI count (3, DESIGN §29.8) like every other tier-VI item; what an effect hands out is not gated by
-  // the shop stock and does not occupy it (`acquireItem`'s `noStock`, Match.rollItemId `ignoreStock`), so the trait and
-  // the strategy no longer run into the shop cap mid-match (the user's correction of 2026-10-12: "通过干员效果获得的装备
-  // 应该没有数量限制，商店里购买的变形同构体数量上限改回和其他等级六的装备一样").
+  // 变形同构体 is handed out by 缪尔赛思's trait (garrison_76: 1 normal / 2 elite) and band 变形者集群 at R5 / R10 / R15.
+  // Its SHOP stock is the measured tier VI count (3, DESIGN §29.8) like every other tier-VI item — the 0.2.5 fix for
+  // those gifts lives in the server, not in this table (acquireItem's `requirePool:false` +
+  // GameData.isUnlimitedGiftItem, §30.1: exhaustion never blocks a fixed gift, and every copy still occupies the cap).
   const itemStock = stockByName(items, { 简易通讯机: 5, 蜂鸣器: 6, 防暴盾: 6, 浓缩嗅盐: 6,
     寻呼模块: 7, 伪装服: 7, 拉特兰桥夹: 7, 商业包装方案: 2 });
   const addendum = ctx.research.core?._criticAddendum || {};

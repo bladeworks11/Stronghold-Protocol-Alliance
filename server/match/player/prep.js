@@ -31,25 +31,21 @@ export class PlayerPrep {
     const handFull = freeSlot(this.hand) < 0;
     if (slot.kind === 'item') {
       if (!this.gd.item(slot.id)) return fail(ERR.BAD_TARGET);
-      // An effect's own offer (a strategy's 特殊装备, 凯瑟琳 定向投放) is not gated by the shop stock, and its pick takes
-      // none: the same rule as every other effect grant (acquireItem's `noStock`, pushItemOffer's flag).
-      if (!offer.noStock && !this.itemPool.canGain(slot.id)) return fail(ERR.SOLD_OUT);
+      if (!this.itemPool.canGain(slot.id)) return fail(ERR.SOLD_OUT);
       if (handFull) return fail(ERR.HAND_FULL);
-    } else {
+    } else if (slot.kind === 'chess') {
       const rec = this.gd.chess(slot.id);
       if (!rec || (rec.isDiy && !rec.diyFor)) return fail(ERR.BAD_TARGET);
-      const base = this.gd.baseIdOf(slot.id);
-      const need = rec.isGolden ? this.gd.goldenCopies : 1;
-      const pool = this.poolOf(base); // the shared pool, or this player's 自选 stock
-      if (pool.has(base) && pool.left(base) < need) return fail(ERR.SOLD_OUT);
+      // Owner decision 2026-10-11 (#498): already displayed operator rewards survive stock exhaustion.
+      // acquireChess records the deficit. Item rewards above still require itemPool.canGain.
       if (handFull) return fail(ERR.HAND_FULL);
-    }
+    } else return fail(ERR.BAD_TARGET);
     const price = Number.isFinite(slot.price) && slot.price > 0 ? Math.trunc(slot.price) : 0;
     if (price > this.funds) return fail(ERR.NO_FUNDS);
     slot.sold = true;
     this.offers.shift();
     if (price > 0) this.spend(price);
-    if (slot.kind === 'item') this.acquireItem(slot.id, { source: 'reward', noStock: !!offer.noStock });
+    if (slot.kind === 'item') this.acquireItem(slot.id, { source: 'reward' });
     else this.acquireChess(slot.id, { source: 'reward' });
     this._afterSpend(price, 'reward');
     this.recompute();

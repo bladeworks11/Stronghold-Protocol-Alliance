@@ -325,11 +325,8 @@ export class MatchSpDraft {
    * Random item id: a choices.json server pool ({ pool }), a tier, or ≤ maxTier shop-eligible items.
    * `player` selects the receiver's fixed-group equipment stock (a whole-room utility like 战术决策 falls back to the
    * first group) — a支援 granted to one seat must respect the stock of the group that seat belongs to.
-   * `ignoreStock`: an EFFECT's own draw skips the stock filter entirely (effectsMeta.ctx.rollItem / rollPool pass it;
-   * the granted copy takes no stock either — acquireItem's `noStock`). The shop's draws, the 机密商店 / 道具补给 cards
-   * and a choice card's equipment keep the gate.
    */
-  rollItemId({ pool = null, tier = null, maxTier = 6, shopLevel = 6, player = null, ignoreStock = false } = {}) {
+  rollItemId({ pool = null, tier = null, maxTier = 6, shopLevel = 6, player = null } = {}) {
     const stock = player ? this.itemPoolFor(player) : this.itemPool;
     const pools = this.gd.choices.pools && typeof this.gd.choices.pools === 'object' ? this.gd.choices.pools : {};
     const p = typeof pool === 'string' && Object.hasOwn(pools, pool) ? pools[pool] : null;
@@ -337,20 +334,20 @@ export class MatchSpDraft {
     const tierList = (lo, hi) => { const out = []; for (let t = lo; t <= hi; t++) for (const id of this.gd.shopItemsByTier[t] || []) out.push(id); return out; };
     if (p && p.kind === 'equip') {
       if (Array.isArray(p.weighted) && p.weighted.length) {
-        const pairs = p.weighted.filter((x) => Array.isArray(x) && this.gd.item(x[0]) && (ignoreStock || stock.canGain(x[0])));
-        return stock.pick(rng, pairs.map(x => x[0]), new Map(pairs), { ignoreStock });
+        const pairs = p.weighted.filter((x) => Array.isArray(x) && this.gd.item(x[0]) && stock.canGain(x[0]));
+        return stock.pick(rng, pairs.map(x => x[0]), new Map(pairs));
       }
       if (Array.isArray(p.items) && p.items.length) {
         const items = p.items.filter((id) => this.gd.item(id));
-        return stock.pick(rng, items, null, { ignoreStock });
+        return stock.pick(rng, items);
       }
       let list;
       if (Array.isArray(p.tiers) && p.tiers.length) list = p.tiers.flatMap((t) => this.gd.shopItemsByTier[t] || []);
       else list = tierList(1, p.maxTier === 'shopLevel' ? Math.max(1, Math.min(6, shopLevel)) : 6);
-      return stock.pick(rng, list, null, { ignoreStock });
+      return stock.pick(rng, list);
     }
     const list = Number.isInteger(tier) ? tierList(tier, tier) : tierList(1, Math.max(1, Math.min(6, maxTier)));
-    return stock.pick(rng, list, null, { ignoreStock });
+    return stock.pick(rng, list);
   }
 
   /**
@@ -360,17 +357,16 @@ export class MatchSpDraft {
    * `extra` (the drawing player's 自选 stock, player/diy.js diyStockEntries) joins that shared-pool draw, `chessOf` reads the
    * bonds (the player's data view: a slotted slot's operator) — 0.2.0 WE2. `player` selects the receiver's fixed
    * card-pool group, so a支援 drawn for one seat never spends another group's copies or equipment stock.
-   * `ignoreStock` (an effect's own draw) skips the equipment stock filter — see rollItemId.
    * @returns {{ kind: 'item'|'chess', id: string, golden?: boolean } | null}
    */
-  rollPool(poolId, { shopLevel = 6, extra = null, chessOf = null, player = null, ignoreStock = false } = {}) {
+  rollPool(poolId, { shopLevel = 6, extra = null, chessOf = null, player = null } = {}) {
     const pool = player ? this.poolFor(player) : this.pool;
     const pools = this.gd.choices.pools && typeof this.gd.choices.pools === 'object' ? this.gd.choices.pools : {};
     const p = typeof poolId === 'string' && Object.hasOwn(pools, poolId) ? pools[poolId] : null;
     if (!p || typeof p !== 'object') return null;
     const lvl = Math.max(1, Math.min(6, Number.isInteger(shopLevel) ? shopLevel : 6));
     if (p.kind === 'equip') {
-      const id = this.rollItemId({ pool: poolId, shopLevel: lvl, player, ignoreStock });
+      const id = this.rollItemId({ pool: poolId, shopLevel: lvl, player });
       return id ? { kind: 'item', id } : null;
     }
     if (p.kind !== 'chess') return null;
