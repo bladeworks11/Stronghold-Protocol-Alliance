@@ -1,7 +1,7 @@
 // 最终攻势 / 隐秘核心: pairing, merged LP, shared boss pool, overtime, leaks, hidden-core condition (FakeBattle).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PHASE, GEO } from '../../shared/constants.js';
+import { PHASE, GEO, MAX_SEATS } from '../../shared/constants.js';
 import { pairPlayers, bossPoolHp, SharedBossPool, hiddenEligible } from '../../server/match/finalAssault.js';
 import { GameData } from '../../server/match/gamedata.js';
 import { FakeBattle } from './fakeBattle.js';
@@ -25,7 +25,12 @@ test('boss pool = bloodPoint[difficulty] × the players alive at the fight\'s st
   const gd = new GameData(RAW, 'mode_multi_hard');
   for (const n of [1, 2, 3, 4]) assert.equal(bossPoolHp(gd, 'boss_1', n), 1800000 * n, `${n} alive`);
   assert.equal(bossPoolHp(gd, 'boss_1'), 1800000 * 4, 'no count given: a full team');
-  assert.equal(bossPoolHp(gd, 'boss_1', 9), 1800000 * 4, 'at most aliveFull (4) players');
+  // Capacity: the pool keeps growing past the original four-player team (up to MAX_SEATS = 20), so a large room
+  // faces one share per living player instead of a quarter-size boss.
+  for (const n of [5, 8, 9, 16, 20]) assert.equal(bossPoolHp(gd, 'boss_1', n), 1800000 * n, `${n} alive scales`);
+  assert.equal(bossPoolHp(gd, 'boss_1', MAX_SEATS), 1800000 * MAX_SEATS, 'twenty alive: twenty shares');
+  assert.equal(bossPoolHp(gd, 'boss_1', MAX_SEATS + 5), 1800000 * MAX_SEATS, `at most MAX_SEATS (${MAX_SEATS}) players`);
+  assert.equal(bossPoolHp(gd, 'boss_1', 99), 1800000 * MAX_SEATS, 'an absurd count is clamped to the seat ceiling');
   assert.equal(gd.bossPoolHp('boss_1', 2), bossPoolHp(gd, 'boss_1', 2), 'GameData agrees');
   assert.equal(bossPoolHp(new GameData(RAW, 'mode_single_abyss'), 'boss_5', 1), 3000000, 'solo: the table value');
   assert.equal(bossPoolHp(new GameData(RAW, 'mode_single_funny'), 'boss_2', 1), 225000);
@@ -41,7 +46,9 @@ test('boss pool = bloodPoint[difficulty] × the players alive at the fight\'s st
   assert.equal(bossPoolHp(scaled, 'boss_1', 2), 900000);
   assert.equal(bossPoolHp(scaled, 'boss_1', 1), 450000);
   assert.equal(bossPoolHp(scaled, 'boss_1'), 1800000, 'no count given: a full team');
-  assert.equal(bossPoolHp(scaled, 'boss_1', 9), 1800000, 'never above the data value');
+  assert.equal(bossPoolHp(scaled, 'boss_1', 9), 1800000 * 9 / 4, 'aliveScaling keeps growing with the team, up to the seat ceiling');
+  assert.equal(bossPoolHp(scaled, 'boss_1', MAX_SEATS), 1800000 * MAX_SEATS / 4, 'twenty alive: the ceiling');
+  assert.equal(bossPoolHp(scaled, 'boss_1', 99), 1800000 * MAX_SEATS / 4, 'never above the seat ceiling');
   // a mode's own entry overrides the global one
   const perMode = { ...RAW, config: { ...RAW.config, modes: { ...RAW.config.modes, mode_multi_hard: { ...RAW.config.modes.mode_multi_hard, bossHpScale: { ...RAW.config.modes.mode_multi_hard.bossHpScale, perPlayer: false } } } } };
   assert.equal(bossPoolHp(new GameData(perMode, 'mode_multi_hard'), 'boss_1', 3), 1800000, 'the mode entry first');
@@ -173,7 +180,9 @@ test('Hidden Core: Σ activated layers (end of the boss prep) > 1200 and team LP
 
 test('Hidden Core is skipped at Σ layers ≤ threshold, on FUNNY, or with team LP ≤ 1; a failed hidden core keeps the clear', () => {
   const gd = new GameData(DATA, 'mode_multi_normal');
-  assert.equal(hiddenEligible(gd, { layerSum: 1200, teamLp: 50 }), false);
+  // the co-op threshold is a FLAT 1200 whatever the room size (it never scales with the player count)
+  assert.equal(gd.hiddenCore.multi, 1200);
+  assert.equal(hiddenEligible(gd, { layerSum: 1200, teamLp: 50 }), false, 'strictly above the threshold');
   assert.equal(hiddenEligible(gd, { layerSum: 1201, teamLp: 50 }), true);
   assert.equal(hiddenEligible(gd, { layerSum: 5000, teamLp: 1 }), false);
   assert.equal(hiddenEligible(new GameData(DATA, 'mode_single_hard'), { layerSum: 351, teamLp: 2 }), true);

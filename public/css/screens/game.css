@@ -292,8 +292,44 @@
 }
 
 /* ---- team panel ------------------------------------------------------------------------------------------- */
-.team { position: absolute; left: .22rem; top: 2.36rem; display: flex; flex-direction: column; gap: .14rem; pointer-events: none; }
-.team__row { position: relative; display: flex; align-items: center; gap: .1rem; pointer-events: auto; }
+/* A room larger than the original four seats has more rows than a screen holds, so the roster scrolls — but the
+   SCROLLER is an inner wrapper, never `.team` itself: an element with `overflow-y: auto` forces `overflow-x` to auto
+   too, which clipped (and produced a horizontal scrollbar for) the emote bubble that hangs off a row's right edge.
+   `--tight` (7+ seats, set from the component) shrinks the rows so a big roster still shows as many teammates at once
+   as it can. */
+.team {
+  position: absolute; left: .22rem; top: 2.36rem;
+  display: flex; flex-direction: column; gap: .14rem;
+  /* no bound and no overflow here: the roster scrolls in .team__scroll (see the note above) */
+  pointer-events: none;
+}
+.team--tight { gap: .07rem; }
+.team--tight .team__scroll { max-height: calc(100vh - 4.6rem); }
+.team__scroll {
+  display: flex; flex-direction: column; gap: inherit;
+  /* the SCROLLER owns the height bound, not `.team`: the bound has to sit on the same element as `overflow-y` */
+  max-height: calc(100vh - 5.4rem);
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* Room on the right for the emote bubble. The rows keep their natural width, so the bubble (1.08rem wide, a fixed
+     official sprite) hangs past a row's right edge; without enough padding here it would sit outside the scroll box and
+     be clipped — the owner saw it as a horizontal scrollbar. 1.2rem covers the bubble plus the gap. */
+  padding-right: 1.2rem;
+}
+.team--tight .team__info { padding: .02rem .1rem .02rem .04rem; }
+.team--tight .team__name { font-size: .13rem; max-width: 1.3rem; }
+.team--tight .team__line { gap: .07rem; }
+.team--tight .team__status { width: .2rem; height: .2rem; }
+/* the scrollbar hugs the rows (the bubble has its own room in the padding above) */
+.team__scroll::-webkit-scrollbar { width: .06rem; }
+.team__scroll::-webkit-scrollbar-thumb { background: rgba(23, 249, 183, .28); }
+/* The row keeps its natural width (its right edge is the avatar's): the emote bubble hangs just past it
+   (`.team__bubble`: left calc(100% + .06rem), asserted by test/ui/emotes.e2e.test.js as `b.left - row.right <= 24`).
+   It is NOT stretched — the panel instead reserves room on the right (`.team__scroll` padding-right), which is what
+   lets the absolutely positioned bubble stay inside the panel's scroll box. */
+.team__row { position: relative; display: flex; align-items: center; gap: .1rem; pointer-events: auto; flex: none; }
 .team__btn {
   position: relative; padding: 0; background: none; border: 0;
   transition: transform var(--t-fast);

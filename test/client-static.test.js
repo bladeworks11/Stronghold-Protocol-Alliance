@@ -1101,7 +1101,7 @@ describe('screen helpers', () => {
   test('room: normalizeSeats / roomFacts / inviteLink', async () => {
     const { normalizeSeats, roomFacts, inviteLink } = await mod('screens/room.js');
     const room = {
-      code: 'ABCD', hostId: 'h', mode: 'coop', difficulty: 'HARD',
+      code: 'ABCD', hostId: 'h', mode: 'coop', difficulty: 'HARD', capacity: 4,
       seats: [
         { seat: 0, playerId: 'h', name: 'Host', isBot: false, ready: false, connected: true },
         { seat: 1, playerId: 'g', name: 'Guest', isBot: false, ready: false, connected: true },
@@ -1109,9 +1109,13 @@ describe('screen helpers', () => {
         { seat: 3, playerId: 'ai_1', name: 'AI·华法琳', isBot: true, ready: true, connected: true },
       ],
     };
-    assert.equal(normalizeSeats(room).length, 4);
-    assert.equal(normalizeSeats({ mode: 'solo', seats: [room.seats[0], null, null, null] }).length, 1);
-    assert.deepEqual(normalizeSeats({ mode: 'coop', seats: 'bad' }), [null, null, null, null]);
+    assert.equal(normalizeSeats(room).length, 4, 'the room pads to its own capacity');
+    // a larger room pads further, and seats beyond it are dropped
+    assert.equal(normalizeSeats({ ...room, capacity: 20, seats: room.seats }).length, 20);
+    assert.equal(normalizeSeats({ ...room, capacity: 8 }).length, 8, 'the state drives the seat count');
+    assert.equal(normalizeSeats({ mode: 'solo', capacity: 1, seats: [room.seats[0], null, null, null] }).length, 1);
+    assert.equal(normalizeSeats({ mode: 'solo', seats: [room.seats[0], null, null, null] }).length, 1, 'solo is always one seat');
+    assert.deepEqual(normalizeSeats({ mode: 'coop', seats: 'bad' }), new Array(8).fill(null), 'a bad seat list falls back to the default width');
     let f = roomFacts(room, 'h');
     assert.equal(f.isHost, true);
     assert.equal(f.canStart, false, 'guest not ready');
@@ -1132,7 +1136,7 @@ describe('screen helpers', () => {
     const { roomFacts } = await mod('screens/room.js');
     const { isSpectating } = await mod('store.js');
     const room = {
-      code: 'ABCD', hostId: 'h', mode: 'coop', difficulty: 'HARD',
+      code: 'ABCD', hostId: 'h', mode: 'coop', difficulty: 'HARD', capacity: 4,
       seats: [{ seat: 0, playerId: 'h', name: 'Host', isBot: false, ready: false, connected: true }, null, null, null],
       spectators: [{ playerId: 's', name: 'Spec', connected: true }],
     };

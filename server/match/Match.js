@@ -178,7 +178,7 @@ import { DataSource } from '../sim/simdata.js';
 import { createRng, deriveSeed } from '../sim/rng.js';
 import { GameData } from './gamedata.js';
 import { RealScheduler } from './scheduler.js';
-import { SharedPool, SharedItemPool, drawDisabledBonds } from './pool.js';
+import { createPoolGroups, drawDisabledBonds } from './pool.js';
 import { PlayerState } from './PlayerState.js';
 import { EffectDispatcher, getDefaultRegistry } from './effectsMeta.js';
 import { setupMatchWaves } from './waves.js';
@@ -331,8 +331,13 @@ export class Match {
     this.disabledBonds = bans.drawn;
     this.staticInactiveBonds = bans.staticOff;
     this.bannedChess = bans.banned;
-    this.pool = new SharedPool(this.gd, { banned: bans.banned });
-    this.itemPool = new SharedItemPool(this.gd, () => this.order);
+    // Fixed card-pool groups (server/match/pool.js createPoolGroups): one shared pool + equipment stock per group.
+    // A match of up to five players gets a single group, i.e. exactly the pre-capacity shared pool.
+    this.poolGroups = createPoolGroups(this.gd, this.order, { banned: bans.banned });
+    this.playerPools = new Map(this.poolGroups.flatMap((g) => g.playerIds.map((id) => [id, g.pool])));
+    // Compatibility for diagnostics and whole-match scans; a player's own transaction always uses its group.
+    this.pool = this.poolGroups[0].pool;
+    this.itemPool = this.poolGroups[0].itemPool;
     // 自选编队 (0.2.0): each human's slotted DIY pieces get their own stock — none for one whose bonds are all off this
     // match (player/diy.js initDiyStock); no randomness is drawn here
     const off = new Set([...bans.drawn, ...bans.staticOff]);
@@ -398,6 +403,22 @@ export class Match {
     this.outcome = null;
     this._turnToken = 0;
   }
+
+  /**
+   * The fixed card-pool group a seat belongs to. Assigned at match start, never reshuffled, so an eliminated or
+   * departed player still resolves to the group it started in.
+   * @param {string|{ playerId: string }} player a playerId or a PlayerState
+   */
+  poolGroupFor(player) {
+    const playerId = typeof player === 'string' ? player : player?.playerId;
+    return this.poolGroups.find((g) => g.playerIds.includes(playerId)) || this.poolGroups[0];
+  }
+
+  /** The shared chess pool a seat rolls and returns copies in. */
+  poolFor(player) { return this.poolGroupFor(player).pool; }
+
+  /** The shared equipment stock a seat buys from and returns to. */
+  itemPoolFor(player) { return this.poolGroupFor(player).itemPool; }
 }
 
 // the method modules, in this order (a name defined twice is an error, never a silent override)

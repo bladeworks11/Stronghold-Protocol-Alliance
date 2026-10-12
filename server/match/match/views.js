@@ -38,6 +38,7 @@ export class MatchViews {
     if (!ps.alive) return 'dead';
     switch (this.phase) {
       case PHASE.INFO_CHECK: return ps.infoReady ? 'ready' : 'deciding';
+      // the strategy draft is one room-wide sequential draft (MatchPhases.bandTaken), so exactly one seat decides
       case PHASE.BAND_DRAFT:
         if (this.draft && this.draft.picks[ps.playerId]) return 'ready';
         return this.draft && this.draftTurn() === ps.playerId ? 'deciding' : 'acting';
@@ -137,11 +138,24 @@ export class MatchViews {
     }
     if (this.phase === PHASE.SP_DRAFT && this.sp) {
       const s = this.sp;
+      // A room of six or more gives every fixed group its OWN six-card page (spDraft.js _initSpGroups), so the flat
+      // `cards` / `taken` below are the first group's page — the one the viewer sees is `spGroup` in its private view.
+      // `groups` may be absent (a five-player room, a plain fixture): the single room-wide page is the fallback.
+      const pages = Array.isArray(s.groups) && s.groups.length ? s.groups : null;
+      const first = pages ? pages[0] : null;
+      const cardsOf = (page) => page.cards.map(c => ({ ...cardView(c), soldOut: c.kind === 'item' && !this.itemPool.canGain(c.id) }));
       v.sp = {
         family: s.family, name: s.name, desc: s.desc, eventId: s.eventId,
-        cards: s.cards.map(c => ({ ...cardView(c), soldOut: c.kind === 'item' && !this.itemPool.canGain(c.id) })), order: s.order.slice(),
-        turn: this.spTurn(), picks: { ...s.picks }, taken: { ...s.taken }, untimed: !!s.untimed,
+        cards: cardsOf(first || s), order: s.order.slice(),
+        turn: this.spTurn(), picks: { ...s.picks },
+        taken: { ...((first ? s.groupTaken.get(first.id) : s.taken) || {}) }, untimed: !!s.untimed,
       };
+      if (pages) {
+        v.sp.groups = pages.map((page) => ({
+          id: page.id, members: page.playerIds.slice(),
+          cards: cardsOf(page), taken: { ...(s.groupTaken.get(page.id) || {}) },
+        }));
+      }
     }
     if (this.phase === PHASE.UNITE && this.unitePlan) v.unite = { helpers: this.unitePlan.helpers.map((p) => p.playerId), leakers: this.unitePlan.leakers.map((p) => p.playerId) };
     // SETTLE after a 联防: its outcome as data (settle.js uniteResultView; GitHub #235, PR #112) — { through, helpers,

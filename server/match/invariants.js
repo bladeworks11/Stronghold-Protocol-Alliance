@@ -39,6 +39,16 @@ export function collectViolations(m, { limit = 25 } = {}) {
   const fail = (msg) => { if (out.length < limit) out.push(msg); };
   const gd = m.gd;
   const held = new Map();
+  // Copies held per FIXED card-pool group (server/match/pool.js createPoolGroups): each group's pool is balanced
+  // against its own members only, so a twenty-player match is checked as five independent pools.
+  /** @type {Map<number, Map<string, number>>} */
+  const heldByGroup = new Map();
+  const groupHeld = (ps) => {
+    const gid = typeof m.poolGroupFor === 'function' ? m.poolGroupFor(ps).id : 1;
+    let map = heldByGroup.get(gid);
+    if (!map) { map = new Map(); heldByGroup.set(gid, map); }
+    return map;
+  };
   const uids = new Set();
   const banned = new Set(m.bannedChess || []);
   const note = (ps, p) => {
@@ -109,8 +119,14 @@ export function collectViolations(m, { limit = 25 } = {}) {
         const maxCopies = rec.isGolden ? gd.goldenCopies : 1;
         if (!Number.isInteger(p.poolCopies) || p.poolCopies < 0 || p.poolCopies > maxCopies) fail(`${id}: ${p.id} holds ${p.poolCopies} copies`);
         const base = gd.baseIdOf(p.id);
-        const tally = rec.isDiy ? diyHeld : held;
-        tally.set(base, (tally.get(base) || 0) + (p.poolCopies || 0));
+        const copies = p.poolCopies || 0;
+        if (rec.isDiy) {
+          diyHeld.set(base, (diyHeld.get(base) || 0) + copies);
+        } else {
+          held.set(base, (held.get(base) || 0) + copies);
+          const gh = groupHeld(ps);
+          gh.set(base, (gh.get(base) || 0) + copies);
+        }
       } else if (p.kind === 'item') {
         if (!gd.item(p.id)) fail(`${id}: unknown item ${p.id}`);
         countItem(p);
@@ -194,21 +210,32 @@ export function collectViolations(m, { limit = 25 } = {}) {
     for (const [base, n] of diyHeld) if (!(ps.diyStock && ps.diyStock.has(base)) && n !== 0) fail(`${id}: 自选 slot ${base} without stock holds ${n} copies`);
   }
 
-  // shared pool accounting
-  for (const [base, e] of m.pool.entries) {
-    if (!(Number.isInteger(e.left) && e.left <= e.cap)) fail(`pool ${base}: balance ${e.left} cap ${e.cap}`);
-    const h = held.get(base) || 0;
-    if (e.left + h !== e.cap) fail(`pool ${base}: left ${e.left} + held ${h} != cap ${e.cap}`);
+  // shared pool accounting — per fixed group when the match has groups, else the single whole-match pool
+  const poolPairs = Array.isArray(m.poolGroups) && m.poolGroups.length
+    ? m.poolGroups.map((g) => [g, heldByGroup.get(g.id) || new Map()])
+    : [[null, held]];
+  for (const [group, gh] of poolPairs) {
+    const pool = group ? group.pool : m.pool;
+    for (const [base, e] of pool.entries) {
+      if (!(Number.isInteger(e.left) && e.left <= e.cap)) fail(`pool ${base}: balance ${e.left} cap ${e.cap}`);
+      const h = gh.get(base) || 0;
+      if (e.left + h !== e.cap) fail(`pool ${base}: left ${e.left} + held ${h} != cap ${e.cap}`);
+    }
+    for (const [base, n] of gh) if (!pool.has(base) && n !== 0) fail(`non-pool chess ${base} holds ${n} copies`);
   }
-  for (const [base, n] of held) if (!m.pool.has(base) && n !== 0) fail(`non-pool chess ${base} holds ${n} copies`);
+  // a copy the pool never issued, held by a group that has no such entry: caught above through gh vs pool.has
 
-  // Shared shop equipment. The chess pool above may go negative (Mimic). Item stock may not: held ≤ cap.
-  if (m.itemPool && gd.raw.items) {
+  // Shared shop equipment, per group. The chess pool above may go negative (Mimic). Item stock may not: held ≤ cap.
+  const itemPools = Array.isArray(m.poolGroups) && m.poolGroups.length
+    ? m.poolGroups.map((g) => g.itemPool)
+    : (m.itemPool ? [m.itemPool] : []);
+  for (const ip of itemPools) {
+    if (!ip || !gd.raw.items) continue;
     for (const [id, rec] of Object.entries(gd.raw.items)) {
       if (!rec || rec.isGolden) continue;
-      const cap = m.itemPool.cap(id);
+      const cap = ip.cap(id);
       if (!Number.isInteger(cap)) continue;
-      const h = m.itemPool.held(id);
+      const h = ip.held(id);
       if (h > cap) fail(`item ${id}: held ${h} > cap ${cap}`);
     }
   }

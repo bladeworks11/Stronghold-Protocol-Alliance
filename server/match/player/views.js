@@ -65,6 +65,16 @@ export class PlayerViews {
       lp: this.lp,
       funds: this.funds,
       bandId: this.bandId,
+      // the seat's 机变 page when the room runs one page per fixed group (spDraft.js _initSpGroups): the positions this
+      // seat may still take. null in a single-page room (five players or fewer), where m.public.sp alone is enough.
+      spGroup: (() => {
+        const s = this.m.sp;
+        if (!s || !Array.isArray(s.groups) || !s.groups.length) return null;
+        const page = typeof this.m.spPageOf === 'function' ? this.m.spPageOf(this.playerId) : null;
+        if (!page) return null;
+        const taken = typeof this.m.spTakenOf === 'function' ? this.m.spTakenOf(page) : {};
+        return { id: page.id, members: page.playerIds.slice(), taken: { ...taken } };
+      })(),
       ready: this.ready,
       canReady: this.alive && this.tempEmpty && !this.personalChoice && this.m.phase === PHASE.PREP,
       personalChoice: this.personalChoice ? {

@@ -548,7 +548,7 @@ export function makeCtx(m, ps, source, hook, ev = null) {
       const base = gd.baseIdOf(id);
       // "some effects fail when the cap is hit" (research 06 §7): by default a chess of the pool needs a free copy (a
       // 自选 piece: one of the player's own stock — player/diy.js poolOf)
-      const pool = typeof ps.poolOf === 'function' ? ps.poolOf(base) : m.pool;
+      const pool = ps.poolOf(base);
       if (opts.requirePool !== false && pool.has(base) && pool.left(base) < 1) return null;
       const p = ps.acquireChess(id, { source: opts.source || source.key || 'effect', toTemp: !!opts.toTemp, fromPool: opts.fromPool !== false });
       // 「歌蕾蒂娅：获得斯卡蒂」 — every silent grantChess (a 特质, 余 SERVER_MOST_BOND, a band, an item, a choice).
@@ -565,10 +565,16 @@ export function makeCtx(m, ps, source, hook, ev = null) {
     },
     grantItem: (itemId, opts = {}) => {
       if (!ps.alive || !gd.item(itemId)) return null;
+      // The shared shop stock limits what the SHOP hands out — a purchase, a reward pick, a choice card. Every other
+      // source is an effect (a 特质, a strategy, a bond, an item) and grants without a cap and without occupying stock:
+      // 缪尔赛思's 变形同构体 (1 normal / 2 elite) and 诗怀雅's 盟约之币 were silently dropped once the tier-VI stock of
+      // three was used up (the user's decision of 2026-10-12).
+      const noStock = opts.noStock !== undefined ? !!opts.noStock : source.kind !== 'choice';
       const p = ps.acquireItem(itemId, {
         source: opts.source || source.key || 'effect',
         toTemp: !!opts.toTemp,
         deferMerge: ps._deferItemMerge > 0,
+        noStock,
       });
       return p ? view(p) : null;
     },
@@ -583,17 +589,23 @@ export function makeCtx(m, ps, source, hook, ev = null) {
         return typeof opts.filter === 'function' ? !!opts.filter(id) : true;
       };
       const extra = typeof ps.diyStockEntries === 'function' ? ps.diyStockEntries() : null;
-      return m.pool.roll(m.rngMeta, { maxTier: Number.isInteger(opts.maxTier) ? opts.maxTier : 6, tier: Number.isInteger(opts.tier) ? opts.tier : null, filter: f, extra, ignoreCounts: opts.ignoreCounts === true });
+      return ps.pool.roll(m.rngMeta, { maxTier: Number.isInteger(opts.maxTier) ? opts.maxTier : 6, tier: Number.isInteger(opts.tier) ? opts.tier : null, filter: f, extra, ignoreCounts: opts.ignoreCounts === true });
     },
-    rollItem: (opts = {}) => m.rollItemId(opts),
+    // The receiver's own group stock gates an equipment grant the SHOP makes (a choice card); an effect's own draw
+    // ignores it, like the grant itself (Match.rollItemId `ignoreStock`, grantItem `noStock`).
+    rollItem: (opts = {}) => m.rollItemId({ ...opts, player: opts.player || ps, ignoreStock: opts.ignoreStock !== undefined ? !!opts.ignoreStock : source.kind !== 'choice' }),
     /**
      * Roll a choices.json pool: equip pools → { kind: 'item', id }; chess pools (items / weighted / shopEligible with
      * tier, minTier, bond, golden) → { kind: 'chess', id, golden } (a pool chess needs a free copy). null when empty.
      */
     rollPool: (poolId, opts = {}) => m.rollPool(poolId, {
       shopLevel: ps.shop.level,
-      // a shared-pool draw also takes the player's 自选 stock, its bonds read through the player's view (rollChess)
+      // a shared-pool draw also takes the player's 自选 stock, its bonds read through the player's view (rollChess);
+      // `player` keeps the draw inside the receiver's fixed card-pool group
+      player: ps,
       extra: typeof ps.diyStockEntries === 'function' ? ps.diyStockEntries() : null, chessOf: (id) => gd.chess(id),
+      // an effect's equip pool is not gated by the shop stock (a choice card's still is)
+      ignoreStock: source.kind !== 'choice',
       ...opts,
     }),
     /**
@@ -643,7 +655,7 @@ export function makeCtx(m, ps, source, hook, ev = null) {
     /** Queue a free pick-one offer of chess (shop.rewardOffer; `label` defaults to offerLabel(source), the bar's header). */
     offerChess: (ids, opts = {}) => !!ps.pushRewardOffer(opts.source || source.key || 'effect', { ids, tier: opts.tier ?? null, label: opts.label ?? offerLabel(gd, source) }),
     /** Queue a free pick-one offer of items (shop.rewardOffer with slots of kind 'item'). */
-    offerItems: (ids, opts = {}) => !!ps.pushItemOffer(ids, { source: opts.source || source.key || 'effect', tier: opts.tier ?? null, label: opts.label ?? offerLabel(gd, source) }),
+    offerItems: (ids, opts = {}) => !!ps.pushItemOffer(ids, { source: opts.source || source.key || 'effect', tier: opts.tier ?? null, label: opts.label ?? offerLabel(gd, source), noStock: opts.noStock !== undefined ? !!opts.noStock : source.kind !== 'choice' }),
     setShopSlot: (i, slot) => {
       if (!Number.isInteger(i) || i < 0 || i >= ps.shop.slots.length) return false;
       if (slot == null) { ps.shop.slots[i] = null; ps.dirty(); return true; }

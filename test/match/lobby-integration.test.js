@@ -167,9 +167,14 @@ test('co-op spectator over websockets: watches the real match like an eliminated
     assert.equal(r.code, 'SPECTATOR', msg.t);
   }
   await ok(a, { t: 'g.infoReady' });
-  const draft = await pickCoopBands([a]);
-  assert.ok(Object.values(draft.draft.picks).includes('band_bldsk'), 'seed 69: the AI already took the default');
-  await a.waitFor('m.public', (p) => p.phase === 'PREP' && p.round === 1, 10000);
+  await pickCoopBands([a]);
+  // Every seat ends the draft with a strategy; the AI seats pick asynchronously, so read the finished state from the
+  // PREP frame (m.public.players carries bandId on every frame). Which strategy each seat holds is NOT asserted any
+  // more: it depends on the room's 「AI 队友最后选择」 (ON by default since 2026-10-12), so the old "the AI took the
+  // 华法琳 default" assumption no longer holds.
+  const prep1 = await a.waitFor('m.public', (p) => p.phase === 'PREP' && p.round === 1, 10000);
+  for (const p of prep1.players) assert.ok(p.bandId, `${p.playerId} holds a strategy`);
+  assert.equal(new Set(prep1.players.map((p) => p.bandId)).size, prep1.players.length, 'no strategy is shared');
   for (const msg of [{ t: 'g.buy', slot: 0 }, { t: 'g.ready', ready: true }, { t: 'g.refresh' }]) {
     const r = await s.request(msg);
     assert.equal(r.code, 'SPECTATOR', msg.t);

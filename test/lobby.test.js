@@ -19,7 +19,7 @@ import { sanitizeName, TokenBucket, SessionRegistry, clientAddress, normalizeIp,
 import { StubMatch as Match } from '../server/match/StubMatch.js';
 import { Match as RealMatch } from '../server/match/Match.js';
 import { TestClient } from './helpers/wsClient.js';
-import { ERR, MAX_SEATS, MAX_SPECTATORS, PHASE, EMOTES } from '../shared/constants.js';
+import { ERR, MAX_SEATS, DEFAULT_SEATS, ROOM_CAPACITIES, MAX_SPECTATORS, PHASE, EMOTES } from '../shared/constants.js';
 
 const CODE_RE = new RegExp(`^[${CODE_ALPHABET}]{4}$`);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -67,8 +67,10 @@ function clientPool(getUrl) {
   };
 }
 
-async function createRoom(c, mode = 'coop', difficulty = 'NORMAL') {
-  const r = await c.request({ t: 'room.create', mode, difficulty });
+async function createRoom(c, mode = 'coop', difficulty = 'NORMAL', capacity = null) {
+  const msg = { t: 'room.create', mode, difficulty };
+  if (capacity != null) msg.capacity = capacity;
+  const r = await c.request(msg);
   assert.equal(r.t, 'ok', JSON.stringify(r));
   return c.waitFor('room.state', (s) => s.hostId === c.id && s.mode === mode);
 }
@@ -485,7 +487,7 @@ describe('websocket lobby', () => {
     await expectError(c, { t: 'room.join', code: 'AB CD' }, ERR.BAD_MSG);
     await expectError(c, { t: 'room.join', code: { $gt: '' } }, ERR.BAD_MSG);
     await expectError(c, { t: 'room.ready', ready: 'yes' }, ERR.BAD_MSG);
-    await expectError(c, { t: 'room.removeBot', seat: 9 }, ERR.BAD_MSG);
+    await expectError(c, { t: 'room.removeBot', seat: 99 }, ERR.BAD_MSG);
     await expectError(c, { t: 'g.buy', slot: -1 }, ERR.BAD_MSG);
     await expectError(c, { t: 'g.move', uid: 1, to: { area: 'moon' } }, ERR.BAD_MSG);
     await expectError(c, { t: 'ping', c: 'x' }, ERR.BAD_MSG);
@@ -542,9 +544,10 @@ describe('websocket lobby', () => {
     assert.equal(st.mode, 'coop');
     assert.equal(st.difficulty, 'HARD');
     assert.equal(st.inMatch, false);
-    assert.equal(st.seats.length, MAX_SEATS);
+    assert.equal(st.capacity, DEFAULT_SEATS, 'a co-op room created without a capacity uses the default');
+    assert.equal(st.seats.length, DEFAULT_SEATS);
     assert.deepEqual(st.seats[0], { seat: 0, playerId: host.id, name: 'Host', isBot: false, ready: false, connected: true });
-    assert.deepEqual(st.seats.slice(1), [null, null, null]);
+    assert.deepEqual(st.seats.slice(1), new Array(DEFAULT_SEATS - 1).fill(null));
 
     const guest = await pool.player('Guest');
     const joined = await joinRoom(guest, st.code.toLowerCase());
@@ -586,7 +589,7 @@ describe('websocket lobby', () => {
 
   test('room full, solo rooms admit one human and no AI', async () => {
     const host = await pool.player('H');
-    const st = await createRoom(host);
+    const st = await createRoom(host, 'coop', 'NORMAL', 4);
     const guests = [];
     for (let i = 0; i < 2; i++) {
       const g = await pool.player(`G${i}`);
@@ -609,7 +612,7 @@ describe('websocket lobby', () => {
   // community report #26 (a remake feature): spectator seats — server/lobby.js header
   test('spectator seats: join / cap / leave / host removal; never a player, never acting, never keeping a room', async () => {
     const host = await pool.player('Host');
-    const st = await createRoom(host);
+    const st = await createRoom(host, 'coop', 'NORMAL', 4);
     assert.deepEqual(st.spectators, []);
     const guest = await pool.player('Guest');
     await joinRoom(guest, st.code);
@@ -762,20 +765,25 @@ describe('websocket lobby', () => {
     const s1 = await host.waitFor('room.state', (s) => s.seats[1]?.isBot);
     assert.equal(s1.seats[1].ready, true);
     assert.equal(s1.seats[1].connected, true);
-    assert.equal(s1.seats[1].name, BOT_NAMES[0]);
+    // the name is DRAWN from the list (randomInt), not taken in list order
+    assert.ok(BOT_NAMES.includes(s1.seats[1].name), `a listed AI name, got ${s1.seats[1].name}`);
     assert.match(s1.seats[1].playerId, /^ai_[0-9a-f]{8}$/);
     await expectOk(host, { t: 'room.addBot' });
     const s2 = await host.waitFor('room.state', (s) => s.seats[2]?.isBot);
-    assert.equal(s2.seats[2].name, BOT_NAMES[1]);
+    assert.ok(BOT_NAMES.includes(s2.seats[2].name));
+    assert.notEqual(s2.seats[2].name, s2.seats[1].name, 'two AI never share a name');
 
     await expectError(host, { t: 'room.removeBot', seat: 0 }, ERR.BAD_TARGET); // human seat
     await expectError(host, { t: 'room.removeBot', seat: 3 }, ERR.BAD_TARGET); // empty seat
+    const freed = s2.seats[1].name;
     await expectOk(host, { t: 'room.removeBot', seat: 1 });
     const s3 = await host.waitFor('room.state', (s) => s.seats[1] === null && s.seats[2]?.isBot);
     assert.ok(s3);
     await expectOk(host, { t: 'room.addBot' });
     const s4 = await host.waitFor('room.state', (s) => s.seats[1]?.isBot);
-    assert.equal(s4.seats[1].name, BOT_NAMES[0], 'freed bot name is reused');
+    assert.ok(BOT_NAMES.includes(s4.seats[1].name));
+    assert.notEqual(s4.seats[1].name, s4.seats[2].name, 'the freed name is the only one that may come back');
+    assert.ok([freed, ...BOT_NAMES].includes(s4.seats[1].name));
 
     await expectOk(host, { t: 'room.leave' });
     const probe = await pool.player('Probe');
@@ -974,7 +982,9 @@ describe('websocket lobby', () => {
     const junk = [1, -1, 1.5, 'x', '', null, true, [], {}, { area: 'board', row: 1, col: 1 }, 'A'.repeat(70), 2 ** 40];
     const gen = () => {
       const r = rnd();
-      if (r < 0.12) return { t: 'room.create', mode: pick(['solo', 'coop', 'coop', 'x']), difficulty: pick(['FUNNY', 'NORMAL', 'HARD', 'ABYSS', 'nope']) };
+      // capacity 4 (the smallest) keeps the fuzz rooms fillable by the five fuzz clients, so room.start / g.infoReady
+      // stay reachable; the 8/10/16/20 capacities are covered by test/lobby-capacity.test.js
+      if (r < 0.12) return { t: 'room.create', mode: pick(['solo', 'coop', 'coop', 'x']), difficulty: pick(['FUNNY', 'NORMAL', 'HARD', 'ABYSS', 'nope']), capacity: 4 };
       if (r < 0.25) return { t: 'room.join', code: pick([...codes(), 'ZZZZ', 'abc', ...codes().map((c) => c.toLowerCase())]) || 'QQQQ' };
       if (r < 0.32) return { t: 'room.leave' };
       if (r < 0.42) return { t: 'room.ready', ready: pick([true, false, 'x']) };

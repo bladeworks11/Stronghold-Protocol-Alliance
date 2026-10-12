@@ -31,7 +31,9 @@ export class PlayerPrep {
     const handFull = freeSlot(this.hand) < 0;
     if (slot.kind === 'item') {
       if (!this.gd.item(slot.id)) return fail(ERR.BAD_TARGET);
-      if (!this.m.itemPool.canGain(slot.id)) return fail(ERR.SOLD_OUT);
+      // An effect's own offer (a strategy's 特殊装备, 凯瑟琳 定向投放) is not gated by the shop stock, and its pick takes
+      // none: the same rule as every other effect grant (acquireItem's `noStock`, pushItemOffer's flag).
+      if (!offer.noStock && !this.itemPool.canGain(slot.id)) return fail(ERR.SOLD_OUT);
       if (handFull) return fail(ERR.HAND_FULL);
     } else {
       const rec = this.gd.chess(slot.id);
@@ -47,7 +49,7 @@ export class PlayerPrep {
     slot.sold = true;
     this.offers.shift();
     if (price > 0) this.spend(price);
-    if (slot.kind === 'item') this.acquireItem(slot.id, { source: 'reward' });
+    if (slot.kind === 'item') this.acquireItem(slot.id, { source: 'reward', noStock: !!offer.noStock });
     else this.acquireChess(slot.id, { source: 'reward' });
     this._afterSpend(price, 'reward');
     this.recompute();

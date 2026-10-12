@@ -40,14 +40,25 @@ export function normalizeDraft(draft, players = []) {
 /**
  * Normalise m.public.sp ({family, cards, turn, picks, order?}).
  * Cards: string ids or objects; picks: {playerId: cardIdx} | [{playerId, idx}] | card.takenBy.
+ *
+ * A room of six or more runs one 机变 page per fixed card-pool group (server/match/match/spDraft.js _initSpGroups):
+ * m.public.sp then carries `groups`, each with its own six cards and its own `taken`, and the flat `cards` / `taken`
+ * are the first group's. `opts.group` (the viewer's own `m.private.spGroup`, i.e. { id, members, taken }) selects the
+ * page the viewer actually chooses from, so the cards shown and the index sent back match the group.
  * @param {any} sp
  * @param {any[]} [players]
+ * @param {{ group?: { id?: number, members?: string[], taken?: Record<string, string> } | null }} [opts]
  */
-export function normalizeSp(sp, players = []) {
+export function normalizeSp(sp, players = [], opts = {}) {
   if (!isObj(sp)) return null;
   const ids = (Array.isArray(players) ? players : []).filter(isObj).map((p) => p.playerId);
   const order = Array.isArray(sp.order) && sp.order.length ? sp.order.filter((x) => typeof x === 'string') : ids;
-  const cards = (Array.isArray(sp.cards) ? sp.cards : []).slice(0, 6).map((c, idx) => {
+  // the viewer's own group page, when the room has any (fall back to the flat, first-group fields)
+  const gid = opts.group && Number.isInteger(opts.group.id) ? opts.group.id : null;
+  const page = gid != null && Array.isArray(sp.groups) ? (sp.groups.find((g) => g && g.id === gid) || null) : null;
+  const srcCards = Array.isArray(page?.cards) ? page.cards : sp.cards;
+  const srcTaken = page ? page.taken : sp.taken;
+  const cards = (Array.isArray(srcCards) ? srcCards : []).slice(0, 6).map((c, idx) => {
     const card = typeof c === 'string' ? { id: c } : isObj(c) ? { ...c } : {};
     return { ...card, idx, takenBy: typeof card.takenBy === 'string' ? card.takenBy : null };
   });
@@ -61,7 +72,8 @@ export function normalizeSp(sp, players = []) {
   };
   if (Array.isArray(src)) src.forEach((v, i) => { if (isObj(v)) add(v.playerId, v.idx); else if (Number.isInteger(v) && order[i]) add(order[i], v); });
   else if (isObj(src)) for (const [k, v] of Object.entries(src)) add(k, v);
-  if (isObj(sp.taken)) for (const [k, v] of Object.entries(sp.taken)) add(v, Number(k));
+  // the taken positions of the SELECTED page; without a group page the flat (first-group) map applies
+  if (isObj(srcTaken)) for (const [k, v] of Object.entries(srcTaken)) add(v, Number(k));
   for (const c of cards) if (c.takenBy) add(c.takenBy, c.idx);
   for (const c of cards) c.takenBy = takenBy.get(c.idx) ?? null;
   let turnPid = null;
@@ -73,6 +85,8 @@ export function normalizeSp(sp, players = []) {
     desc: typeof sp.desc === 'string' && sp.desc ? sp.desc : null,
     untimed: !!sp.untimed,
     cards, order, turnPid, pickOf, takenBy, pickedCount: pickOf.size,
+    /** the id of the group page these cards belong to (null when the room runs one page for everybody) */
+    groupId: page ? page.id : null,
   };
 }
 

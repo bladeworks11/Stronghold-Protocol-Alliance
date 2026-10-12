@@ -14,8 +14,17 @@ import { OK, fail, DELAYS } from './common.js';
 /** Cards of the personal choice (PRTS 卫戍协议：盟约 下半 §法术 教鞭: "于3个战术特训的悬赏任务中选择一项"). */
 const PERSONAL_OFFER_SIZE = 3;
 
+/**
+ * Whether this 机变 step runs one six-card page per fixed card-pool group. `groups` is absent on a plain fixture (and
+ * on a room of five players or fewer, where the original single room-wide page applies), so every reader asks here.
+ * @param {any} sp
+ */
+const spGrouped = (sp) => !!(sp && Array.isArray(sp.groups) && sp.groups.length);
+
 export class MatchSpDraft {
   enterSpDraft() {
+    // A personal 教鞭 reward: the item gate follows the receiver's own group stock as the turn moves, so one group
+    // running out of an item cannot offer it to another group's seat.
     const draft = generateDraft(this.gd, this.rngDraft, this.round, { stageId: this.stageId, bondAvailable: (bondId) => this.bondLive(bondId), itemAvailable: id => this.itemPool.canGain(id) });
     const alive = this.alivePlayers();
     if (!draft || !alive.length) { this.enterPrep(); return; }
@@ -26,61 +35,187 @@ export class MatchSpDraft {
     order = this.humansFirst(order);
     // untimed: solo and any single-human match (soloUntimed); the co-op order / 6 cards stay
     const untimed = this.soloUntimed;
-    this.sp = { ...draft, order, idx: 0, picks: {}, taken: {}, untimed, turnDeadline: 0 };
+    this.sp = {
+      ...draft, order, idx: 0, picks: {}, taken: {}, untimed, turnDeadline: 0,
+      /** per fixed card-pool group: its own six-card page and who took which position (see _spGroups) */
+      groups: [], groupOf: new Map(), groupTaken: new Map(), cursor: 0,
+    };
+    this._initSpGroups();
     this.setDeadline(0);
     this.startSpTurn();
     this.markPublic();
   }
 
+  /**
+   * One 机变 page per fixed card-pool group. A room of six or more splits into the same groups the shared pools use
+   * (server/match/pool.js createPoolGroups), each drawing its OWN six cards of the round's family: the whole room rolls
+   * the event type once, then every group gets an independent page. That is the difference from the strategy draft
+   * (MatchPhases.bandTaken), which stays room-wide.
+   *
+   * Why: one room-wide page of six cards cannot serve twenty seats — the taken positions run out after six picks and
+   * the remaining seats have nothing to choose. With a page per group every seat always has six options, a card a
+   * group-mate took is the only one it cannot repeat, and two groups may take the same card (owner's rule 2026-10-12:
+   * 「机变分类就行」). A room of five or fewer keeps the original single page.
+   */
+  _initSpGroups() {
+    const s = this.sp;
+    if (!s || this.isSolo) return;
+    const groups = Array.isArray(this.poolGroups) ? this.poolGroups : [];
+    if (groups.length <= 1) return;
+    for (const g of groups) {
+      const page = this.spPageFor(g);
+      s.groups.push(page);
+      for (const pid of g.playerIds) s.groupOf.set(pid, page);
+    }
+    for (const page of s.groups) s.groupTaken.set(page.id, {});
+  }
+
+  /**
+   * Build a group's page: the same round and family, cards drawn independently (unwrapped from the room's own draft,
+   * whose family the whole room shares). Falls back to the room's cards when a group's page comes out empty.
+   */
+  spPageFor(group) {
+    const base = this.sp;
+    const drawn = generateDraft(this.gd, this.rngDraft, this.round, {
+      stageId: this.stageId, family: base.family,
+      bondAvailable: (bondId) => this.bondLive(bondId),
+      itemAvailable: id => this.itemPoolFor(group.playerIds[0]).canGain(id),
+    });
+    const cards = drawn && drawn.cards && drawn.cards.length ? drawn.cards : base.cards;
+    return { id: group.id, playerIds: group.playerIds.slice(), cards };
+  }
+
+  /** The 机变 page a seat chooses from: its group's own page, or the single room-wide one. */
+  spPageOf(playerId) {
+    const s = this.sp;
+    if (!spGrouped(s)) return s;
+    return s.groupOf.get(playerId) || s.groups[0];
+  }
+
+  /** The positions already taken on `page`. */
+  spTakenOf(page) {
+    const s = this.sp;
+    if (!page || !spGrouped(s)) return s.taken;
+    return s.groupTaken.get(page.id) || {};
+  }
+
   spTurn() {
     const s = this.sp;
     if (!s) return null;
-    return s.order[s.idx] ?? null;
+    // grouped pages: every group advances along the SAME room order, so one position is one seat per group (see
+    // startSpTurn); a single-page room keeps the original seat-by-seat cursor. `groups` is absent on a plain fixture.
+    return spGrouped(s) ? (s.order[s.cursor] ?? null) : (s.order[s.idx] ?? null);
   }
 
-  spCardAvailable(card) { return !!card && this.sp?.taken[card.idx] == null && (card.kind !== 'item' || this.itemPool.canGain(card.id)); }
+  /** Whether `card` can still be taken: by `ps` when given (its own group's page), else on any group's page. */
+  spCardAvailable(card) { return !!card && (card.kind !== 'item' || this.itemPool.canGain(card.id)); }
+
+  /**
+   * Whether `ps` may still take position `idx` of its page: free on ITS group's page (a group-mate already took it ⇒
+   * no) and, for an equipment card, affordable from that group's stock.
+   */
+  spCardOpen(ps, idx) {
+    const s = this.sp;
+    if (!s || !ps) return false;
+    const page = this.spPageOf(ps.playerId);
+    const card = page && page.cards ? page.cards[idx] : null;
+    if (!card) return false;
+    if (this.spTakenOf(page)[idx] != null) return false;
+    return this.spCardAvailable(card);
+  }
+
+  /** Every group's live picker for the current room-order position. */
+  spActors() {
+    const s = this.sp;
+    if (!s) return [];
+    const out = [];
+    if (!spGrouped(s)) {
+      const pid = s.order[s.idx];
+      const ps = pid ? this.players.get(pid) : null;
+      if (ps && ps.alive && s.picks[ps.playerId] == null) out.push(ps);
+      return out;
+    }
+    for (const page of s.groups) {
+      const pid = s.order[s.cursor];
+      const ps = pid ? this.players.get(pid) : null;
+      if (ps && ps.alive && s.picks[ps.playerId] == null && page.playerIds.includes(pid)) out.push(ps);
+    }
+    return out;
+  }
 
   startSpTurn() {
     const s = this.sp;
     this.cancel(this._turnTimer);
     this._turnTimer = null;
-    while (s.idx < s.order.length) {
-      const ps = this.players.get(s.order[s.idx]);
-      if (ps && ps.alive && s.picks[ps.playerId] == null) break;
-      s.idx++;
+    const grouped = spGrouped(s);
+    // Advance past positions every group has already resolved, then past seats that need no pick (eliminated, or the
+    // seat is not a member of that group).
+    for (let guard = 0; guard <= s.order.length + 1; guard++) {
+      if (grouped) {
+        if (s.cursor >= s.order.length) break;
+        const pid = s.order[s.cursor];
+        const ps = this.players.get(pid);
+        const pending = s.groups.some((page) => page.playerIds.includes(pid) && ps && ps.alive && s.picks[pid] == null);
+        if (pending) break;
+        s.cursor++;
+      } else {
+        while (s.idx < s.order.length) {
+          const ps = this.players.get(s.order[s.idx]);
+          if (ps && ps.alive && s.picks[ps.playerId] == null) break;
+          s.idx++;
+        }
+        break;
+      }
     }
-    const available = s.cards.filter(c => this.spCardAvailable(c)).map(c => c.idx);
-    if (s.idx >= s.order.length || !available.length) { this.setDeadline(0); this.later(0, () => this.finishSpDraft()); return; }
+    const actors = this.spActors();
+    const anyOpen = grouped
+      ? actors.some((ps) => this.spPageOf(ps.playerId).cards.some((_c, i) => this.spCardOpen(ps, i)))
+      : (s.idx < s.order.length && s.cards.some((_c, i) => this.spCardOpen(this.players.get(this.spTurn()), i)));
+    if (!actors.length || !anyOpen) {
+      if (grouped && s.cursor < s.order.length) {
+        // this position has nothing to pick anywhere (every page exhausted): close it and move on
+        s.cursor++;
+        this.startSpTurn();
+        return;
+      }
+      this.setDeadline(0);
+      this.later(0, () => this.finishSpDraft());
+      return;
+    }
     const token = ++this._turnToken;
     if (!s.untimed) {
-      const first = s.idx === 0;
+      const first = (grouped ? s.cursor : s.idx) === 0;
       const secs = first ? this.gd.timer('spFirst') : this.gd.timer('spTurn');
       this.setDeadline(secs, () => {
         if (this.phase !== PHASE.SP_DRAFT || token !== this._turnToken) return;
-        const ps = this.players.get(this.spTurn());
-        if (!ps) return;
-        const avail = s.cards.filter(c => this.spCardAvailable(c)).map(c => c.idx);
-        if (!avail.length) { this.finishSpDraft(); return; }
-        this._applyCard(ps, avail[Math.floor(this.rngDraft() * avail.length)]);
+        for (const ps of this.spActors()) this._autoCard(ps);
       });
       s.turnDeadline = this.deadline;
     } else {
       this.setDeadline(0);
     }
-    const cur = this.players.get(this.spTurn());
-    if (cur && cur.botControlled) this.scheduleSpBot();
+    for (const ps of this.spActors()) if (ps.botControlled) this.scheduleSpBot(ps);
     this.markPublic();
   }
 
-  scheduleSpBot() {
+  /** A turn that ran out: take a random still-open position of the seat's own page. */
+  _autoCard(ps) {
+    const page = this.spPageOf(ps.playerId);
+    const open = page.cards.map((_c, i) => i).filter((i) => this.spCardOpen(ps, i));
+    if (!open.length) return;
+    this._applyCard(ps, open[Math.floor(this.rngDraft() * open.length)]);
+  }
+
+  scheduleSpBot(who = null) {
     const token = this._turnToken;
     this.later(this.scaled(DELAYS.BOT_ACTION), () => {
       if (this.phase !== PHASE.SP_DRAFT || token !== this._turnToken || !this.sp) return;
-      const ps = this.players.get(this.spTurn());
+      const ps = who || this.players.get(this.spTurn());
       if (!ps || !ps.botControlled) return;
-      const avail = this.sp.cards.filter(c => this.spCardAvailable(c)).map(c => c.idx);
+      const page = this.spPageOf(ps.playerId);
+      const avail = page.cards.map((_c, i) => i).filter((i) => this.spCardOpen(ps, i));
       if (!avail.length) return;
-      this._applyCard(ps, botPickCard(this, ps, this.sp.cards, avail));
+      this._applyCard(ps, botPickCard(this, ps, page.cards, avail));
     });
   }
 
@@ -89,19 +224,23 @@ export class MatchSpDraft {
     if (!ps.alive) return fail(ERR.ELIMINATED);
     if (this.sp.picks[ps.playerId] != null) return fail(ERR.ALREADY);
     if (this.spTurn() !== ps.playerId) return fail(ERR.NOT_YOUR_TURN);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= this.sp.cards.length) return fail(ERR.BAD_TARGET);
-    if (!this.spCardAvailable(this.sp.cards[idx])) return fail(ERR.SOLD_OUT);
+    const page = this.spPageOf(ps.playerId);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= page.cards.length) return fail(ERR.BAD_TARGET);
+    if (!this.spCardOpen(ps, idx)) return fail(ERR.SOLD_OUT);
     this._applyCard(ps, idx);
     return OK;
   }
 
   _applyCard(ps, idx) {
     const s = this.sp;
-    if (!s || s.picks[ps.playerId] != null || !this.spCardAvailable(s.cards[idx])) return;
-    const card = s.cards[idx];
-    if (!card) return;
+    if (!s || s.picks[ps.playerId] != null) return;
+    const page = this.spPageOf(ps.playerId);
+    const card = page && page.cards ? page.cards[idx] : null;
+    if (!card || this.spTakenOf(page)[idx] != null) return;
+    if (!this.spCardAvailable(card)) return;
     s.picks[ps.playerId] = idx;
-    s.taken[idx] = ps.playerId;
+    if (spGrouped(s)) s.groupTaken.get(page.id)[idx] = ps.playerId;
+    else s.taken[idx] = ps.playerId;
     try { applyCard(this, ps, card); } catch (e) { this.reportError(`applyCard ${card.id}`, e); }
     this.markPrivate(ps);
     this.markPublic();
@@ -182,28 +321,36 @@ export class MatchSpDraft {
     return b.id;
   }
 
-  /** Random item id: a choices.json server pool ({ pool }), a tier, or ≤ maxTier shop-eligible items. */
-  rollItemId({ pool = null, tier = null, maxTier = 6, shopLevel = 6 } = {}) {
+  /**
+   * Random item id: a choices.json server pool ({ pool }), a tier, or ≤ maxTier shop-eligible items.
+   * `player` selects the receiver's fixed-group equipment stock (a whole-room utility like 战术决策 falls back to the
+   * first group) — a支援 granted to one seat must respect the stock of the group that seat belongs to.
+   * `ignoreStock`: an EFFECT's own draw skips the stock filter entirely (effectsMeta.ctx.rollItem / rollPool pass it;
+   * the granted copy takes no stock either — acquireItem's `noStock`). The shop's draws, the 机密商店 / 道具补给 cards
+   * and a choice card's equipment keep the gate.
+   */
+  rollItemId({ pool = null, tier = null, maxTier = 6, shopLevel = 6, player = null, ignoreStock = false } = {}) {
+    const stock = player ? this.itemPoolFor(player) : this.itemPool;
     const pools = this.gd.choices.pools && typeof this.gd.choices.pools === 'object' ? this.gd.choices.pools : {};
     const p = typeof pool === 'string' && Object.hasOwn(pools, pool) ? pools[pool] : null;
     const rng = this.rngMeta;
     const tierList = (lo, hi) => { const out = []; for (let t = lo; t <= hi; t++) for (const id of this.gd.shopItemsByTier[t] || []) out.push(id); return out; };
     if (p && p.kind === 'equip') {
       if (Array.isArray(p.weighted) && p.weighted.length) {
-        const pairs = p.weighted.filter((x) => Array.isArray(x) && this.gd.item(x[0]) && this.itemPool.canGain(x[0]));
-        return this.itemPool.pick(rng, pairs.map(x => x[0]), new Map(pairs));
+        const pairs = p.weighted.filter((x) => Array.isArray(x) && this.gd.item(x[0]) && (ignoreStock || stock.canGain(x[0])));
+        return stock.pick(rng, pairs.map(x => x[0]), new Map(pairs), { ignoreStock });
       }
       if (Array.isArray(p.items) && p.items.length) {
         const items = p.items.filter((id) => this.gd.item(id));
-        return this.itemPool.pick(rng, items);
+        return stock.pick(rng, items, null, { ignoreStock });
       }
       let list;
       if (Array.isArray(p.tiers) && p.tiers.length) list = p.tiers.flatMap((t) => this.gd.shopItemsByTier[t] || []);
       else list = tierList(1, p.maxTier === 'shopLevel' ? Math.max(1, Math.min(6, shopLevel)) : 6);
-      return this.itemPool.pick(rng, list);
+      return stock.pick(rng, list, null, { ignoreStock });
     }
     const list = Number.isInteger(tier) ? tierList(tier, tier) : tierList(1, Math.max(1, Math.min(6, maxTier)));
-    return this.itemPool.pick(rng, list);
+    return stock.pick(rng, list, null, { ignoreStock });
   }
 
   /**
@@ -211,16 +358,19 @@ export class MatchSpDraft {
    * list — only chess with a free pool copy (or outside the pool) qualify — else a copy-weighted draw from the shared
    * pool filtered by `tier` / `minTier` / `maxTier` (number or 'shopLevel') / `bond`; `golden: true` yields the elite id.
    * `extra` (the drawing player's 自选 stock, player/diy.js diyStockEntries) joins that shared-pool draw, `chessOf` reads the
-   * bonds (the player's data view: a slotted slot's operator) — 0.2.0 WE2.
+   * bonds (the player's data view: a slotted slot's operator) — 0.2.0 WE2. `player` selects the receiver's fixed
+   * card-pool group, so a支援 drawn for one seat never spends another group's copies or equipment stock.
+   * `ignoreStock` (an effect's own draw) skips the equipment stock filter — see rollItemId.
    * @returns {{ kind: 'item'|'chess', id: string, golden?: boolean } | null}
    */
-  rollPool(poolId, { shopLevel = 6, extra = null, chessOf = null } = {}) {
+  rollPool(poolId, { shopLevel = 6, extra = null, chessOf = null, player = null, ignoreStock = false } = {}) {
+    const pool = player ? this.poolFor(player) : this.pool;
     const pools = this.gd.choices.pools && typeof this.gd.choices.pools === 'object' ? this.gd.choices.pools : {};
     const p = typeof poolId === 'string' && Object.hasOwn(pools, poolId) ? pools[poolId] : null;
     if (!p || typeof p !== 'object') return null;
     const lvl = Math.max(1, Math.min(6, Number.isInteger(shopLevel) ? shopLevel : 6));
     if (p.kind === 'equip') {
-      const id = this.rollItemId({ pool: poolId, shopLevel: lvl });
+      const id = this.rollItemId({ pool: poolId, shopLevel: lvl, player, ignoreStock });
       return id ? { kind: 'item', id } : null;
     }
     if (p.kind !== 'chess') return null;
@@ -228,7 +378,7 @@ export class MatchSpDraft {
     const free = (id) => {
       if (typeof id !== 'string' || !this.gd.chess(id)) return false;
       const base = this.gd.baseIdOf(id);
-      return !this.pool.has(base) || this.pool.left(base) > 0;
+      return !pool.has(base) || pool.left(base) > 0;
     };
     let id = null;
     if (Array.isArray(p.weighted) && p.weighted.length) {
@@ -242,7 +392,7 @@ export class MatchSpDraft {
       const minTier = Number.isInteger(p.minTier) ? p.minTier : 1;
       const bond = typeof p.bond === 'string' ? p.bond : null;
       const recOf = typeof chessOf === 'function' ? chessOf : (cid) => this.gd.chess(cid);
-      id = this.pool.roll(rng, {
+      id = pool.roll(rng, {
         tier: Number.isInteger(p.tier) ? p.tier : null,
         maxTier,
         filter: (cid, e) => e.tier >= minTier && (!bond || (Array.isArray(recOf(cid)?.bonds) && recOf(cid).bonds.includes(bond))),

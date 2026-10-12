@@ -584,6 +584,35 @@ describe('drafts', () => {
     assert.equal(normalizeSp(null), null);
     assert.equal(normalizeSp({ cards: new Array(9).fill({}) }).cards.length, 6, 'at most 6 cards');
   });
+  test('normalizeSp: a grouped room shows the viewer OWN group page, not the first group one', () => {
+    // m.public.sp of a twenty-player room: five pages, plus the flat first-group fields a small room would use
+    const pub = {
+      family: 'supply', order: ['p_0', 'p_1'], turn: 'p_1', picks: {},
+      cards: [{ id: 'first' }, { id: 'first2' }], taken: { 0: 'p_0' },
+      groups: [
+        { id: 1, members: ['p_0', 'p_1'], cards: [{ id: 'g1a' }, { id: 'g1b' }], taken: { 0: 'p_0' } },
+        { id: 2, members: ['p_4', 'p_5'], cards: [{ id: 'g2a' }, { id: 'g2b' }], taken: { 1: 'p_5' } },
+      ],
+    };
+    // without a group the flat fields apply (a five-player room, an older server)
+    const flat = normalizeSp(pub, players);
+    assert.deepEqual(flat.cards.map((c) => c.id), ['first', 'first2']);
+    assert.equal(flat.groupId, null);
+    assert.equal(flat.cards[0].takenBy, 'p_0', 'the flat taken map is the first group one');
+    // group 2 sees ITS cards and ITS taken positions
+    const g2 = normalizeSp(pub, players, { group: { id: 2, members: ['p_4', 'p_5'], taken: { 1: 'p_5' } } });
+    assert.deepEqual(g2.cards.map((c) => c.id), ['g2a', 'g2b'], 'the second group own page');
+    assert.equal(g2.groupId, 2);
+    assert.equal(g2.cards[0].takenBy, null, 'position 0 is free in group 2 even though group 1 took it');
+    assert.equal(g2.cards[1].takenBy, 'p_5', 'the group own taken position');
+    // group 1 keeps its own page and its own taken map
+    const g1 = normalizeSp(pub, players, { group: { id: 1, members: ['p_0', 'p_1'], taken: { 0: 'p_0' } } });
+    assert.deepEqual(g1.cards.map((c) => c.id), ['g1a', 'g1b']);
+    assert.equal(g1.cards[0].takenBy, 'p_0');
+    // a group id the payload does not carry falls back to the flat fields rather than rendering nothing
+    const missing = normalizeSp(pub, players, { group: { id: 9, members: ['p_9'], taken: {} } });
+    assert.deepEqual(missing.cards.map((c) => c.id), ['first', 'first2']);
+  });
   test('personal choice: only the living recipient in the current PREP, independent of the public draft', () => {
     const pub = { phase: PHASE.PREP, round: 14, sp: { family: 'supply', cards: ['global'] } };
     const priv = { playerId: 'a', alive: true, canReady: false, temp: [], personalChoice: {

@@ -933,6 +933,16 @@ normal and the charge remains.
 `m.public.sp.cards[].soldOut` disables duplicates when a preceding choice used the final copy; timer/bot choices
 use the same availability. Non-shop effect-only equipment is unlimited.
 
+The stock is the SHOP's (the user's correction of 2026-10-12): a purchase, a reward pick and a choice card consult it and
+occupy it — `piece.stockCost` carries the copies a piece represents (a normal 1, a golden 2, an effect grant 0; a merge
+adds up what it consumed, so a golden never conjures stock, and 整备 adds the copy it takes) — while equipment an EFFECT
+hands out is neither gated by it nor counted in it (`PlayerState.acquireItem`'s `noStock`, `ctx.grantItem`, and an
+effect's pick-one item offer: `pushItemOffer`'s `noStock` / `pickReward`; an effect's own item draw passes
+`Match.rollItemId`'s `ignoreStock`, the shop's and a choice card's do not). 缪尔赛思's 特质
+(garrison_76: 1 normal / 2 elite), a band's 变形同构体 at R5/R10/R15, 诗怀雅's 盟约之币 and 耶拉's 谢拉格不融冰 therefore
+arrive without a ceiling, and 变形同构体 sells at the measured tier VI count of 3 again like every other tier-VI item
+(`tools/build-data.mjs` `itemStock`).
+
 Operator capacities use measured single-player exceptions and twice those counts in co-op; DIY remains private.
 `take(..., { overdraw: true })` records full occupation of a granted/promoted elite or a Mimic copy beyond capacity;
 normal takes remain bounded. Negative internal balance is a deficit, never negative available stock. Existing

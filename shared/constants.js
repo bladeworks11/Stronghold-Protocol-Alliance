@@ -10,7 +10,16 @@ export const APP_VERSION = '0.2.4';
  * tools/package.mjs refuses to build a release zip from it without --allow-dev. */
 export const DEV_BUILD = /-dev$/.test(APP_VERSION);
 
-export const MAX_SEATS = 4;
+/** Four players remain the baseline for card-pool groups and hidden-core layers. Capacity includes humans and AI. */
+export const BASE_SEATS = 4;
+/** Hard upper bound of a co-op room's player seats (humans + AI teammates). */
+export const MAX_SEATS = 20;
+/** Seats of a co-op room created without an explicit capacity. */
+export const DEFAULT_SEATS = 8;
+/** Capacities the host may choose when creating a co-op room. */
+export const ROOM_CAPACITIES = Object.freeze([4, 8, 10, 16, 20]);
+/** One independent 机变 page per fixed group; card indexes are local to its six positions. */
+export const MAX_DRAFT_CARDS = 6;
 /**
  * Spectator seats of a co-op room (community report #26, owner's decision 2026-10-04) — a remake feature: the official
  * room has 1–4 players and no spectator seat (there only eliminated players and 联防 bystanders watch, research 09 §3.1).

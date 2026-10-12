@@ -455,7 +455,8 @@ function applyDefault(m, ps, card) {
     switch (b.key) {
       case 'global_special_choice_gain_equip': {
         for (let i = 0; i < count; i++) {
-          const id = m.rollItemId({ pool: bs.pool });
+          // the receiver's own group stock gates the roll (Match.rollItemId), never another group's
+          const id = m.rollItemId({ pool: bs.pool, player: ps });
           if (id) ps.acquireItem(id, { source: 'choice' });
         }
         handled = true;
@@ -490,8 +491,8 @@ function applyDefault(m, ps, card) {
         const hasBond = (cid) => { const c = pgd.chess(cid); return !!(c && Array.isArray(c.bonds) && c.bonds.includes(bs.bond)); };
         for (let i = 0; i < count; i++) {
           const extra = typeof ps.diyStockEntries === 'function' ? ps.diyStockEntries() : null;
-          const id = m.pool.roll(m.rngMeta, { maxTier: Math.max(1, ps.shop.level), filter: hasBond, extra })
-            || m.pool.roll(m.rngMeta, { maxTier: 6, filter: hasBond, extra });
+          const id = ps.pool.roll(m.rngMeta, { maxTier: Math.max(1, ps.shop.level), filter: hasBond, extra })
+            || ps.pool.roll(m.rngMeta, { maxTier: 6, filter: hasBond, extra });
           if (id) ps.acquireChess(id, { source: 'choice' });
         }
         handled = true;

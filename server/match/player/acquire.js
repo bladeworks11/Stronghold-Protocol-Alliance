@@ -198,14 +198,17 @@ export class PlayerAcquire {
   }
 
   /** Normal item → golden version in place (整备). A golden occupies two shared copies and this piece
-   * already occupies one, so the upgrade waits when no second copy is free. The caller keeps its charge. */
+   * already occupies one, so the upgrade waits when no second copy is free. The caller keeps its charge.
+   * The piece's own cost grows by the copy it takes (pieceCost), so an upgrade never conjures stock. */
   upgradeItem(piece) {
     const rec = this.gd.item(piece.id);
     if (!rec || rec.isGolden) return false;
     const gid = rec.upgradeChessId || rec.goldenId;
     if (!gid || !this.gd.item(gid)) return false;
-    if (this.m.itemPool.left(piece.id) < 1) return false;
+    if (this.itemPool.left(piece.id) < 1) return false;
+    const cost = this.itemPool.pieceCost(piece) + 1;
     piece.id = gid;
+    piece.stockCost = cost;
     this.recompute();
     return true;
   }
@@ -228,7 +231,7 @@ export class PlayerAcquire {
       const fresh = (id) => !list.includes(id);
       for (let i = 0; i < ro.count; i++) {
         let id = null;
-        for (let tt = t; tt >= 1 && !id; tt--) id = this.m.pool.roll(this.m.rngShop, { tier: tt, filter: fresh, extra: this.diyRollEntries() });
+        for (let tt = t; tt >= 1 && !id; tt--) id = this.pool.roll(this.m.rngShop, { tier: tt, filter: fresh, extra: this.diyRollEntries() });
         if (id) list.push(id);
       }
     }
@@ -242,11 +245,13 @@ export class PlayerAcquire {
   /**
    * Queue a free pick-one offer of items (凯瑟琳 定向投放, 娜仁图亚 见者有份); shown as shop.rewardOffer with slots of kind
    * 'item' under its `label` (the effect's name; player report #6 after 0.1.0).
+   * `noStock`: the offer comes from an effect, so the shared shop stock neither filters the list nor is taken when the
+   * pick is made (prep.js pickReward) — the same rule as every other effect grant (acquireItem's `noStock`).
    */
-  pushItemOffer(ids, { source = 'effect', tier = null, label = null } = {}) {
-    const list = [...new Set(Array.isArray(ids) ? ids : [])].filter((id) => this.gd.item(id) && this.m.itemPool.canGain(id)).slice(0, MAX_OFFER_SLOTS);
+  pushItemOffer(ids, { source = 'effect', tier = null, label = null, noStock = false } = {}) {
+    const list = [...new Set(Array.isArray(ids) ? ids : [])].filter((id) => this.gd.item(id) && (noStock || this.itemPool.canGain(id))).slice(0, MAX_OFFER_SLOTS);
     if (!list.length) return null;
-    const offer = { tier: Number.isInteger(tier) ? tier : null, source, label: typeof label === 'string' && label ? label : null, slots: list.map((id) => ({ kind: 'item', id, price: 0, sold: false })) };
+    const offer = { tier: Number.isInteger(tier) ? tier : null, source, label: typeof label === 'string' && label ? label : null, noStock, slots: list.map((id) => ({ kind: 'item', id, price: 0, sold: false })) };
     this.offers.push(offer);
     this.dirty();
     return offer;
@@ -284,15 +289,18 @@ export class PlayerAcquire {
    * call, even when an identical normal copy is already owned. The next prep's start runs checkItemMerges. Nothing
    * already equipped is taken off for the fight about to start. Hand and temp both full keeps the 「整备区已满，获得的装备已销毁」
    * outcome. [ASSUMED] every item granted at 休整期结束, not only 维多利亚's 战栗维式重锤 (owner's decision 2026-10-04).
+   * `noStock` (an effect grant: a 特质, a strategy, a bond, an item — effectsMeta.grantItem): the shared shop stock
+   * neither gates it nor is occupied by it, so 缪尔赛思's 变形同构体 and 诗怀雅's 盟约之币 are uncapped. A purchase, a
+   * reward pick and a choice card keep the default gate (the user's decision of 2026-10-12).
    */
-  acquireItem(itemId, { source = 'grant', toTemp = false, silent = false, deferMerge = false } = {}) {
+  acquireItem(itemId, { source = 'grant', toTemp = false, silent = false, deferMerge = false, noStock = false } = {}) {
     const rec = this.gd.item(itemId);
     if (!rec) return null;
-    if (!this.m.itemPool.canGain(itemId)) {
+    if (!noStock && !this.itemPool.canGain(itemId)) {
       this.m.toast(this, 'warn', '装备库存不足，未获得该装备');
       return null;
     }
-    let piece = this.newPiece('item', itemId);
+    let piece = this.newPiece('item', itemId, { stockCost: noStock ? 0 : this.itemPool.need(itemId) });
     // A prep-end grant may sit beside an identical copy until the next prep. The invariant counts only copies
     // without this mark, so the fight that is about to start is not reported as a missed merge.
     if (deferMerge) piece.deferMerge = true;
@@ -318,7 +326,11 @@ export class PlayerAcquire {
     // remember where equipped twins sat: with a full hand AND a full temp the golden item takes the first one's slot
     const slotOf = consumed.filter((l) => l.area === 'equipped').map((l) => ({ holder: l.holder, idx: l.holder.items.indexOf(l.piece) }));
     for (const l of consumed) if (l.area !== 'new') this._detach(l);
-    const golden = this.newPiece('item', rec.upgradeChessId || rec.goldenId);
+    const golden = this.newPiece('item', rec.upgradeChessId || rec.goldenId, {
+      // the golden occupies exactly what its ingredients occupied: two shop copies for a pair bought/upgraded, one for
+      // a bought copy merged with an effect-granted one, none for two granted ones (pieceCost)
+      stockCost: consumed.reduce((n, l) => n + this.itemPool.pieceCost(l.piece), 0),
+    });
     if (!this.stow(golden, { allowTemp: true })) {
       const at = slotOf[0];
       if (!at || !this.find(at.holder.uid)) {

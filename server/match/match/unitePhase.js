@@ -5,7 +5,7 @@
 
 import { PHASE, GEO } from '../../../shared/constants.js';
 import { deriveSeed } from '../../sim/rng.js';
-import { uniteBattleOpts, uniteSurvivors } from '../unite.js';
+import { uniteBattleOpts, uniteSurvivors, nextUnitePlan } from '../unite.js';
 import { FieldRunner, timelineAt, uniteBillBounds } from '../fields.js';
 import { uniteLeft } from '../../sim/spec.js';
 import { FLOW_TICKER_PRIORITY, DELAYS } from './common.js';
@@ -35,7 +35,7 @@ export class MatchUnite {
         this.fields[0].live = false;
         this.deadline = 0;
         this.markPublic();
-        this.later(this.scaled(DELAYS.COMBAT_END), () => this.settle(plan, res));
+        this.later(this.scaled(DELAYS.COMBAT_END), () => this._afterUniteWave(plan, res));
       },
     });
     this.runner.start();
@@ -50,7 +50,9 @@ export class MatchUnite {
   _uniteOpts(plan, limit) {
     const { wave, players } = uniteBattleOpts(this, plan, limit);
     return {
-      seed: deriveSeed(this.seed, `u:${this.round}`),
+      // Each wave of a round is its own battle: the seed changes from the second wave on, so a client never mistakes
+      // it for a re-send of the wave before it (the first wave keeps the original `u:<round>` seed).
+      seed: deriveSeed(this.seed, plan.round > 1 ? `u:${this.round}:${plan.round}` : `u:${this.round}`),
       kind: 'unite',
       modeId: this.modeId,
       round: this.round,
@@ -96,7 +98,23 @@ export class MatchUnite {
     this.deadline = 0;
     this.markPublic();
     const plan = this.unitePlan;
-    this.later(this.scaled(DELAYS.COMBAT_END), () => this.settle(plan, res));
+    this.later(this.scaled(DELAYS.COMBAT_END), () => this._afterUniteWave(plan, res));
+  }
+
+  /**
+   * One wave of 联防 finished: run another unused pair while enemies are still standing and the opening group count
+   * allows it (unite.js nextUnitePlan), else settle the round. Every completed wave's result is kept in the plan's
+   * history, so settlement sees the kills and rewards of all of them.
+   */
+  _afterUniteWave(plan, res) {
+    if (this.phase !== PHASE.UNITE) return;
+    const next = nextUnitePlan(plan, res);
+    if (next) {
+      this.unitePlan = next;
+      this.startUnite(next);
+      return;
+    }
+    this.settle(plan, res);
   }
 
   /**
@@ -119,11 +137,15 @@ export class MatchUnite {
     let res = null;
     if (f && f.cc) res = f.done ? f.result : null;
     else if (f && f.battle && f.battle.finished) { try { res = f.battle.result(); } catch { res = null; } }
+    // every wave that already finished keeps billing its survivors; the running wave contributes its own count
+    let done = 0;
+    for (const past of plan.history || []) done += uniteSurvivors(plan, past).get(pid) || 0;
     if (res && res.synthetic) {
       const own = this.lastResults.get(pid);
-      return own && Array.isArray(own.leaked) ? own.leaked.filter((l) => l && l.counted !== false).length : 0;
+      const ownLeaks = own && Array.isArray(own.leaked) ? own.leaked.filter((l) => l && l.counted !== false).length : 0;
+      return done + ownLeaks;
     }
-    if (res) return uniteSurvivors(plan, res).get(pid) || 0;
+    if (res) return done + (uniteSurvivors(plan, res).get(pid) || 0);
     const sent = plan.leaked.filter((l) => l.sourcePlayerId === pid).length;
     let live = null;
     if (f && f.cc) {
@@ -138,7 +160,7 @@ export class MatchUnite {
     if (!this._uniteBounds || this._uniteBounds.plan !== plan) this._uniteBounds = { plan, bounds: uniteBillBounds(plan.leaked, this.gd) };
     const bound = this._uniteBounds.bounds.get(pid) ?? sent;
     const standing = live ? Math.min(bound, Math.max(0, Math.trunc(Number(live[pid]) || 0))) : sent;
-    return standing + (plan.notReentered.get(pid) || 0);
+    return done + standing + (plan.notReentered.get(pid) || 0);
   }
 
   /** Server-run 联防 (streaming mode): refresh m.public about once a game second when a leaker's count moved. */

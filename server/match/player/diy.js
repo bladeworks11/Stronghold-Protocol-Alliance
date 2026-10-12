@@ -200,10 +200,16 @@ export class PlayerDiy {
     return { stock, banned: Object.freeze(banned) };
   }
 
-  /** The copy accounting of base chess `baseId` for this player: its own stock for a slotted DIY slot, else the shared pool. */
+  /** The copy accounting of base chess `baseId` for this player: its own stock for a slotted DIY slot, else the shared
+   *  pool of the FIXED GROUP this seat was assigned at match start (server/match/pool.js createPoolGroups). */
   poolOf(baseId) {
-    return this.diyStock && this.diyStock.has(baseId) ? this.diyStock : this.m.pool;
+    return this.diyStock && this.diyStock.has(baseId) ? this.diyStock : this.pool;
   }
+
+  /** This seat's fixed card-pool group: its shared chess pool and its shared equipment stock. */
+  get group() { return this.m.poolGroupFor(this); }
+  get pool() { return this.group.pool; }
+  get itemPool() { return this.group.itemPool; }
 
   /**
    * The stock entries this player's shop draws from now ([baseId, entry] with copies left and the 调度中心 at the slot's

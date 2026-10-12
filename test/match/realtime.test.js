@@ -71,10 +71,11 @@ async function driveLoop(c, { skipOnce = false, until, stats }) {
       done.add('info');
       assert.equal((await c.request({ t: 'g.infoReady' })).t, 'ok');
     } else if (pub.phase === 'BAND_DRAFT' && pub.draft && pub.draft.turn === c.id) {
-      const key = `band:${pub.draft.order.join()}`;
-      if (done.has(key)) continue;
-      done.add(key);
+      // The draft order is read fresh every turn: with 「AI 队友最后选择」 (on by default) a skip moves the seat to the
+      // end of the humans still to pick, so an order-keyed marker would let the same seat act twice. The skip happens
+      // ONCE per seat — remembering the skip itself, not "this turn is done", so the seat still picks when it is up again.
       const last = pub.draft.order.indexOf(c.id) === pub.draft.order.length - 1;
+      const bandKey = `band:${pub.round}:${c.id}`;
       if (!skipped && !last) {
         skipped = true;
         const r = await c.request({ t: 'g.bandSkip' });
@@ -82,7 +83,8 @@ async function driveLoop(c, { skipOnce = false, until, stats }) {
         if (r.t === 'ok') stats.skips++;
         else assert.ok(['NOT_YOUR_TURN', 'ALREADY'].includes(r.code), `bandSkip: ${JSON.stringify(r)}`);
         stats.skipTries++;
-      } else {
+      } else if (!done.has(bandKey)) {
+        done.add(bandKey);
         const r = await c.request({ t: 'g.band', bandId: 'band_bldsk' });
         if (r.t === 'ok') stats.bands++;
         else stats.bandTimeouts++;

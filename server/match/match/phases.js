@@ -133,6 +133,12 @@ export class MatchPhases {
    * Whether `bandId` was already picked by another player of this draft. Research 09 §5 / DESIGN §14 corrections:
    * the strategy draft marks a teammate's pick as 队友已选 and it cannot be chosen again (co-op). The automatic
    * assignments — a turn that runs out and a departing seat — obey the same rule: see timeoutBand / defaultBand.
+   *
+   * ROOM-WIDE at every capacity (owner's rule, 2026-10-12): the whole room drafts one seat at a time and a strategy any
+   * other seat took is unavailable to everybody, so a twenty-player room hands out twenty different strategies out of
+   * the mode's 40 (every mode offers 40, so the pool always has room). Deliberately NOT split into the fixed card-pool
+   * groups: the strategy step is one shared choice of the whole room. The in-match 机变 draft (MatchSpDraft) is the
+   * one that follows those groups instead.
    */
   bandTaken(bandId, playerId) {
     const picks = this.draft?.picks || {};

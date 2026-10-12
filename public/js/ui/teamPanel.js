@@ -155,7 +155,13 @@ export function TeamPanel({ pub, myId, watching, bubbles, onWatch, compact = fal
     noteAsked(p);
     onWatch(p);
   };
-  return html`<aside class=${cx('team', compact && 'team--compact')} aria-label=${t('同盟成员')}>
+  // A room larger than the original four seats has more rows than fit a screen: the ROSTER scrolls inside `.team__scroll`
+  // and, past six rows, tightens so a twenty-player roster shows as many teammates at once as it can. `.team` itself
+  // must NOT scroll — an element with `overflow-y: auto` forces `overflow-x` to auto, which clipped the emote bubble
+  // hanging off a row's right edge (owner report 2026-10-12).
+  const tight = players.length > 6;
+  return html`<aside class=${cx('team', compact && 'team--compact', tight && 'team--tight')} aria-label=${t('同盟成员')}>
+    <div class="team__scroll">
     ${players.map((p) => {
       const self = p.playerId === myId;
       const status = p.alive === false ? 'dead' : p.status;
@@ -199,5 +205,6 @@ export function TeamPanel({ pub, myId, watching, bubbles, onWatch, compact = fal
         ${bubble ? html`<${EmoteBubble} key=${bubble.seq} id=${bubble.id} class="team__bubble" />` : null}
       </div>`;
     })}
+    </div>
   </aside>`;
 }

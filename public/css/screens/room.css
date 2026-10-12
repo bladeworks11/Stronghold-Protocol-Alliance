@@ -42,13 +42,42 @@
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 3.8rem));
-  grid-template-rows: minmax(0, 6rem);
+  /* One row at the design height; further rows are implicit and share what is left. `align-content: start` keeps them
+     from being centred out of the box, and the overflow makes a room too large for the viewport scroll rather than
+     hide its last row under the footer bar. A room of 9+ seats (three rows) switches to the compact metrics below. */
+  grid-auto-rows: minmax(0, 1fr);
   justify-content: center;
-  align-content: center;
+  align-content: start;
   gap: .3rem;
   padding: .3rem .6rem .24rem;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
-.seats--solo { grid-template-columns: 3.8rem minmax(0, 6.4rem); }
+.seats--solo { grid-template-columns: 3.8rem minmax(0, 6.4rem); grid-auto-rows: minmax(0, 6rem); }
+/* A roster of two rows or more (5+ seats, four columns): the card is a fraction of the height a single-row room gives
+   it, so the portrait drops from its design size (2.1rem below) to one that fits its art band. 1.3rem is the band of a
+   two-row card (1.37rem at the 16:9-or-wider window the root scale is built for — theme.css `html`, which is why the
+   band is a fixed number of rem per row count); `.seats--tight` below takes over at three rows. The AI 队友 label under
+   the portrait steps aside (the avatar's own AI tag already marks the seat), so the frame keeps the band to itself.
+   A --av taller than the band was cut off by the art box's `overflow: hidden`: a 16/20-seat room showed every
+   operator's head and feet cropped (user report, 2026-10-12: "这个界面每个人的头像显示不全"). Every internal measure of
+   .avatar is calc(... * var(--av)), so a smaller --av scales the frame as one piece. */
+.seats--rows .seat__art .avatar { --av: 1.3rem; }
+.seats--rows .seat__bot-label { display: none; }
+/* A roster of three rows or more (9+ seats): trim the card so four or five rows fit a 900px-tall viewport. The row
+   height is a fixed value rather than 1fr — a squeezed row would clip the empty seat's 「等待博士加入」 (a centred flex
+   child loses both ends), so a room too short for its rows scrolls instead of hiding their text. */
+.seats--tight { gap: .18rem; padding: .18rem .6rem .16rem; grid-auto-rows: 2.4rem; }
+.seats--tight .seat { gap: .02rem; padding: .08rem .16rem .08rem; }
+/* the compact card's art band: its 2.4rem row less that card's own text, ≈1.04rem */
+.seats--tight .seat__art .avatar { --av: .95rem; }
+.seats--tight .seat__art { min-height: 0; margin: .02rem 0; }
+.seats--tight .seat__wait { font-size: calc(.16 * var(--t)); }
+.seats--tight .seat__state { font-size: calc(.15 * var(--t)); }
+.seats--tight .seat__state { font-size: calc(.15 * var(--t)); }
+.seats--tight .seat__state .icon { width: .18rem; height: .18rem; }
+.seats--tight .seat__foot { min-height: .32rem; margin-top: .03rem; padding-top: .06rem; }
+.seats--tight .seat__name { font-size: calc(.22 * var(--t)); }
 
 .seat {
   --bk-c: var(--line-3);
@@ -122,6 +151,8 @@
   height: .14rem;
   background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, .06) 0 .05rem, transparent .05rem .1rem);
 }
+/* The portrait's design size: a single-row room's art box is ~5rem tall, so the frame keeps the 2.1rem the layout was
+   drawn for. `.seats--rows` / `.seats--tight` above take it down when the roster needs more rows. */
 .seat__art .avatar { --av: 2.1rem; }
 .seat__bot-label {
   display: flex;
@@ -245,8 +276,11 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: .3rem;
-  height: 1.5rem;
-  padding: 0 .6rem;
+  /* The left column stacks three controls (difficulty, 博士席位, AI 队友最后选择), so the bar is as tall as it needs to
+     be instead of a fixed 1.5rem that used to cut the last one off. */
+  min-height: 1.5rem;
+  height: auto;
+  padding: .2rem .6rem;
   background: linear-gradient(0deg, rgba(7, 9, 8, .96), rgba(10, 13, 12, .7));
   border-top: 1px solid var(--line);
 }
@@ -296,10 +330,14 @@
 }
 .dpick__opt.is-active .icon { opacity: 1; filter: drop-shadow(0 0 5px var(--d-color)); }
 .dpick--ro { border: 0; background: none; gap: .18rem; align-items: center; font-size: calc(.14 * var(--t)); }
-/* 「AI 队友最后选择」 (GitHub #338, co-op): one switch styled like a difficulty option, under the difficulty picker */
-.room-bar__opts { display: flex; flex-direction: column; align-items: flex-start; gap: .08rem; min-width: 0; }
+/* the left column of the bar: difficulty picker, 博士席位 picker and the 「AI 队友最后选择」 switch, stacked */
+.room-bar__opts { display: flex; flex-direction: column; align-items: flex-start; gap: .06rem; min-width: 0; }
+/* 博士席位 (room.setCapacity): the same option look as the difficulty picker, one row of five numbers */
+.capick { display: flex; align-items: center; gap: .12rem; }
+.capick__label { font-size: calc(.14 * var(--t)); color: var(--text-md); white-space: nowrap; }
+.capick .dpick__opt { height: .34rem; padding: 0 .16rem; font-size: calc(.16 * var(--t)); }
 .ailast { display: flex; align-items: center; gap: .12rem; font-size: calc(.14 * var(--t)); }
-.ailast__opt { --d-color: var(--mint-400); height: .36rem; padding: 0 .14rem; border: 1px solid var(--line-2); background: rgba(0, 0, 0, .3); font-size: calc(.15 * var(--t)); letter-spacing: .04em; }
+.ailast__opt { --d-color: var(--mint-400); height: .34rem; padding: 0 .14rem; border: 1px solid var(--line-2); background: rgba(0, 0, 0, .3); font-size: calc(.15 * var(--t)); letter-spacing: .04em; }
 .ailast__opt:last-child { border-right: 1px solid var(--line-2); }
 .ailast__opt .icon { opacity: .25; }
 .ailast__opt .icon.is-on { opacity: 1; }

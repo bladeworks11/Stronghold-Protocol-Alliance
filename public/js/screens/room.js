@@ -12,7 +12,7 @@
 // Texts go through t() (docs/I18N.md).
 
 import { useEffect, useRef, useState } from '../../vendor/hooks.module.js';
-import { DIFFICULTIES, DIFFICULTY_NAMES, DIFFICULTY_COLORS, MAX_SEATS, MAX_SPECTATORS } from '../../../shared/constants.js';
+import { DIFFICULTIES, DIFFICULTY_NAMES, DIFFICULTY_COLORS, MAX_SEATS, DEFAULT_SEATS, ROOM_CAPACITIES, MAX_SPECTATORS } from '../../../shared/constants.js';
 import {
   html, Button, Icon, MicroLabel, PingPill, AvatarFrame, DifficultyTag, DifficultyIcon, Tooltip, confirmDialog, doctorNo,
 } from '../ui/components.js';
@@ -28,12 +28,15 @@ import { difficultyInfo } from './lobby.js';
 import { t, tc } from '../../../shared/i18n.js';
 
 /**
- * Seats padded to the room's capacity (co-op 4, solo 1), each null or a seat record.
+ * Seats padded to the room's own capacity (co-op 4/8/10/16/20 — room.state.capacity; solo 1), each null or a seat
+ * record. A server that does not send a capacity falls back to DEFAULT_SEATS (the server always sends it, so this
+ * only matters for a hand-built state object).
  * @param {any} room room.state payload
  * @returns {(null | {seat:number, playerId:any, name:string, isBot:boolean, ready:boolean, connected:boolean})[]}
  */
 export function normalizeSeats(room) {
-  const cap = room?.mode === 'solo' ? 1 : MAX_SEATS;
+  const raw = Number(room?.capacity);
+  const cap = room?.mode === 'solo' ? 1 : (Number.isInteger(raw) && raw >= 1 && raw <= MAX_SEATS ? raw : DEFAULT_SEATS);
   const src = Array.isArray(room?.seats) ? room.seats : [];
   const out = [];
   for (let i = 0; i < cap; i++) {
@@ -204,6 +207,26 @@ function DifficultyPicker({ room, isHost, busy, onPick }) {
   </div>`;
 }
 
+/** Co-op room capacity (room.setCapacity, ROOM_CAPACITIES): the host picks 4/8/10/16/20 before the match. */
+function CapacityPicker({ room, isHost, busy, onPick }) {
+  if (room?.mode === 'solo') return null;
+  const cap = Number.isInteger(room?.capacity) ? room.capacity : DEFAULT_SEATS;
+  if (!isHost) {
+    return html`<div class="capick">
+      <span class="capick__label">${t('博士席位')}</span><b class="num">${cap}</b>
+      <span class="t-dim">${t('由创建者选择')}</span>
+    </div>`;
+  }
+  return html`<div class="capick" role="radiogroup" aria-label=${t('博士席位')}>
+    <span class="capick__label">${t('博士席位')}</span>
+    <div class="dpick">
+      ${ROOM_CAPACITIES.map((n) => html`<button key=${n} type="button" role="radio" aria-checked=${cap === n ? 'true' : 'false'}
+          class=${`dpick__opt num${cap === n ? ' is-active' : ''}`} disabled=${!!busy}
+          onClick=${() => cap !== n && onPick(n)}>${n}</button>`)}
+    </div>
+  </div>`;
+}
+
 /** The 「AI 队友最后选择」 switch (co-op): the host toggles it, everybody else sees its state. */
 function AiLastToggle({ option, busy, onToggle }) {
   if (!option) return null;
@@ -233,6 +256,8 @@ export function RoomScreen() {
   const online = conn.status === 'online';
   const coop = room.mode !== 'solo';
   const facts = roomFacts(room, me.playerId);
+  // the seats grid is four columns wide (screens/room.css .seats), so the row count is ceil(seats / 4)
+  const rows = Math.max(1, Math.ceil(facts.seats.length / 4));
   const myReady = !!facts.mine?.ready;
   const info = difficultyInfo(room.mode, room.difficulty);
 
@@ -259,6 +284,7 @@ export function RoomScreen() {
     if (ok) run(`kick${seat}`, () => net.request('room.kick', { seat, playerId }));
   };
   const setDifficulty = (difficulty) => run('diff', () => net.request('room.setDifficulty', { difficulty }));
+  const setCapacity = (capacity) => run('cap', () => net.request('room.setCapacity', { capacity }));
   const setAiLast = (on) => run('ailast', () => net.request('room.setAiPicksLast', { on }));
   // spectator seats: the host frees one; a spectator takes a free player seat with room.join of this room
   const removeSpectator = (playerId) => run(`rs${playerId}`, () => net.request('room.removeSpectator', { playerId }));
@@ -321,7 +347,11 @@ export function RoomScreen() {
       </div>
     </header>
 
-    <main class=${`seats${coop ? '' : ' seats--solo'}`}>
+    ${/* The seats grid has four columns, so the roster's row count is what shrinks each card — and with it the seat art
+          band the portrait has to fit into. `.seats--rows` (2+ rows) and `.seats--tight` (3+ rows, the compact metrics)
+          carry the matching portrait sizes; without them a 10-seat room squeezed the band to ~12px on a 1600×900 window
+          and the 2.1rem frame was cut off by the box's `overflow: hidden` (user report, 2026-10-12). */ ''}
+    <main class=${`seats${coop ? '' : ' seats--solo'}${coop && rows > 1 ? ' seats--rows' : ''}${coop && rows > 2 ? ' seats--tight' : ''}`}>
       ${facts.seats.map((s, i) => html`<${SeatCard} key=${s ? `p${s.playerId}` : `e${i}`} seat=${s} index=${i} room=${room} facts=${facts}
         myId=${me.playerId} busy=${busy} onAddBot=${addBot} onRemoveBot=${removeBot} onKick=${kick} />`)}
       ${coop ? null : html`<aside class="solo-brief brackets">
@@ -342,6 +372,7 @@ export function RoomScreen() {
         <span class="room-bar__label">${t('模拟难度')}<${MicroLabel}>DIFFICULTY<//></span>
         <div class="room-bar__opts">
           <${DifficultyPicker} room=${room} isHost=${facts.isHost} busy=${busy} onPick=${setDifficulty} />
+          <${CapacityPicker} room=${room} isHost=${facts.isHost} busy=${busy} onPick=${setCapacity} />
           <${AiLastToggle} option=${aiLastOption(room, me.playerId)} busy=${busy} onToggle=${setAiLast} />
         </div>
       </div>

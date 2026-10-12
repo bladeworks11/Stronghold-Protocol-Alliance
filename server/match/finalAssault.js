@@ -104,6 +104,10 @@ export class SharedBossPool {
 
 /**
  * Hidden-core eligibility.
+ *
+ * The layer threshold is FLAT per mode and does NOT scale with the number of players: co-op uses `hiddenCore.multi`
+ * (1200, the upstream value) whatever the room size, so a twenty-player room is held to the same total as a
+ * four-player one. (The capacity fork scaled it by living players / 4 — deliberately not adopted here.)
  * @param {import('./gamedata.js').GameData} gd
  * @param {{ layerSum: number, teamLp: number }} s
  */

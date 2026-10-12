@@ -17,6 +17,39 @@
 // (`extra`, after its own): one player's 自选 stock (0.2.0, player/diy.js diyRollEntries) — weighted by its copies like
 // any chess, drawn by that player's shop only.
 
+import { poolGroupSizes, poolCopyScale } from '../../shared/playerCapacity.js';
+
+/**
+ * Split a match's occupied seats into FIXED card-pool groups (seat order) — one shared chess pool and one shared
+ * equipment stock per group, so a twenty-player room is five independent four-player shops instead of one pool that
+ * twenty players compete for. Groups are assigned once at match start and never reshuffled: elimination, leaving or a
+ * reconnect keeps a seat in the group it started in, and returned copies go back to the owner's group only.
+ *
+ * Up to five players get a single group of that size, i.e. exactly the original 1–4 player game (a 5-player room gets
+ * its own slightly larger pool). Six or more split into groups of three, four or five.
+ * @param {import('./gamedata.js').GameData} gd
+ * @param {Array<{ seat: number, playerId: string }>} players the match's `order` (a copy is taken)
+ * @param {{ banned?: Iterable<string> }} [opts]
+ * @returns {Array<{ id: number, playerIds: string[], scale: number, pool: SharedPool, itemPool: SharedItemPool }>}
+ */
+export function createPoolGroups(gd, players, opts = {}) {
+  const sorted = players.slice().sort((a, b) => a.seat - b.seat);
+  let offset = 0;
+  return poolGroupSizes(sorted.length).map((size, i) => {
+    const members = sorted.slice(offset, offset + size);
+    const playerIds = members.map((p) => p.playerId);
+    offset += size;
+    const scale = poolCopyScale(size);
+    return {
+      id: i + 1,
+      playerIds,
+      scale,
+      pool: new SharedPool(gd, { ...opts, scale }),
+      itemPool: new SharedItemPool(gd, () => members, { scale }),
+    };
+  });
+}
+
 /**
  * Per-match disabled bond set D and banned chess (research 01 A2): D = uniform sample of `core` core bonds and `addon`
  * add-on bonds among weight > 0 bonds that are active in the mode. A visible chess is banned iff every one of its
@@ -54,18 +87,23 @@ function sample(arr, n, rng) {
 export class SharedPool {
   /**
    * @param {import('./gamedata.js').GameData} gd
-   * @param {{ banned?: Iterable<string> }} [opts]
+   * @param {{ banned?: Iterable<string>, scale?: number }} [opts] `scale` widens every copy count for a larger group
    */
-  constructor(gd, { banned = [] } = {}) {
+  constructor(gd, { banned = [], scale = 1 } = {}) {
     this.gd = gd;
+    this.scale = Number.isFinite(scale) && scale > 0 ? scale : 1;
     const ban = new Set(banned);
     /** @type {Map<string, { cap: number, left: number, tier: number }>} */
     this.entries = new Map();
     for (const id of gd.visibleChess) {
       if (ban.has(id)) continue;
-      const cap = gd.poolCopies(id);
+      const tier = gd.tierOf(id);
+      const scaled = gd.poolCopies(id) * this.scale;
+      // A five-player group floors tier III (the measured "5人 III 阶 = 45" value: 36 × 1.25); every other tier and
+      // group rounds up, so a scaled pool never shrinks below the unscaled one.
+      const cap = this.scale === poolCopyScale(5) && tier === 3 ? Math.floor(scaled) : Math.ceil(scaled);
       if (cap <= 0) continue;
-      this.entries.set(id, { cap, left: cap, tier: gd.tierOf(id) });
+      this.entries.set(id, { cap, left: cap, tier });
     }
     this.banned = [...ban].sort();
   }
@@ -185,18 +223,42 @@ export class SharedPool {
 /** Shared equipment stock, derived from actual ownership. Merges, equips and returns cannot lose a reservation:
  * normal equipment occupies one, upgraded equipment two. Shop/choice displays reserve nothing. Source: the original
  * experiment BV1eLXXBqEgF, 1:30 and 2:30. [ASSUMED] An item that is consumed/destroyed or removed by elimination no
- * longer occupies stock, consistently with the video's ownership model; this is not a per-match purchase limit. */
+ * longer occupies stock, consistently with the video's ownership model; this is not a per-match purchase limit.
+ *
+ * The stock is the SHOP's limit: what a purchase, a reward pick or a choice card hands out, and what those copies keep
+ * occupying. Equipment an EFFECT hands out (a 特质, a strategy, a bond, an item) is not limited by it and does not
+ * occupy it (`piece.stockCost` 0, acquireItem's `noStock`): 缪尔赛思's 变形同构体 and 诗怀雅's 盟约之币 have no cap
+ * (the user's decision of 2026-10-12 — the tier-VI stock of three silently dropped the trait's own grant). */
 export class SharedItemPool {
-  constructor(gd, players) { this.gd = gd; this.players = players; }
-  cap(id) { return this.gd.itemPoolCopies(id); }
+  constructor(gd, players, { scale = 1 } = {}) {
+    this.gd = gd;
+    this.players = players;
+    this.scale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  }
+  cap(id) {
+    const cap = this.gd.itemPoolCopies(id);
+    return cap == null ? null : Math.ceil(cap * this.scale);
+  }
   need(id) { return this.gd.isGolden(id) ? 2 : 1; }
+  /**
+   * Shared stock one OWNED item piece occupies. A copy the shop handed out carries its own cost (`piece.stockCost`, a
+   * normal 1 / a golden 2), and a merge or a 整备 upgrade adds the copies it consumed, so a merged golden never
+   * conjures stock; an effect-granted copy carries 0. A piece without a mark (an older state object, a hand-built
+   * test piece) counts as `need`.
+   * @param {{ id: string, stockCost?: number }} piece
+   */
+  pieceCost(piece) {
+    if (!piece) return 0;
+    const c = piece.stockCost;
+    return Number.isInteger(c) && c >= 0 ? c : this.need(piece.id);
+  }
   held(id) {
     const base = this.gd.baseIdOf(id);
     let count = 0;
     const see = p => {
       if (!p) return;
-      if (p.kind === 'item' && this.gd.baseIdOf(p.id) === base) count += this.need(p.id);
-      for (const item of p.items || []) if (this.gd.baseIdOf(item.id) === base) count += this.need(item.id);
+      if (p.kind === 'item' && this.gd.baseIdOf(p.id) === base) count += this.pieceCost(p);
+      for (const item of p.items || []) if (this.gd.baseIdOf(item.id) === base) count += this.pieceCost(item);
     };
     for (const ps of this.players()) {
       for (const p of ps.hand) see(p);
@@ -208,9 +270,11 @@ export class SharedItemPool {
   left(id) { const cap = this.cap(id); return cap == null ? Infinity : Math.max(0, cap - this.held(id)); }
   canGain(id) { return this.left(id) >= this.need(id); }
   /** Stock gates eligibility, not probability: retain the existing uniform item draw or explicit data weights.
-   * The measured stock table alone does not establish shop probabilities. */
-  pick(rng, ids, weights = null) {
-    const list = [...new Set(ids)].filter(id => this.canGain(id));
+   * The measured stock table alone does not establish shop probabilities.
+   * `ignoreStock` (an effect's own draw: a trait's 定制品, a strategy's random equipment) skips the gate — the grant is
+   * uncapped and takes no stock anyway (acquireItem's `noStock`). */
+  pick(rng, ids, weights = null, { ignoreStock = false } = {}) {
+    const list = [...new Set(ids)].filter(id => ignoreStock || this.canGain(id));
     const pairs = list.map(id => [id, weights ? Math.max(0, Number(weights.get(id)) || 0) : 1]);
     const total = pairs.reduce((n, p) => n + Math.max(0, p[1]), 0);
     if (!(total > 0)) return null;

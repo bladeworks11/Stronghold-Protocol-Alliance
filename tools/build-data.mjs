@@ -3589,13 +3589,14 @@ function buildConfig(ctx, waves, stages, bands, chess, items) {
   }));
   const chessStock = stockByName(chess, { 普罗旺斯: 10, 德克萨斯: 10, 跃跃: 10, 古米: 10, 格雷伊: 10,
     风丸: 8, 赫默: 12, 休谟斯: 12, 砾: 12, 蒂比: 12, 调香师: 12 });
-  // 变形同构体 is the only equipment handed out by traits and strategies — 缪尔赛思's garrison_76 (1 normal / 2 elite) and
-  // band 变形者集群 at R5 / R10 / R15 — and an earlier release keeps every copy (it never merges, is never sold and is
-  // never consumed). The tier VI count of the measured table is 3 (DESIGN §29.8), so the operator's own trait and the
-  // strategy ran into that shop cap mid-match and were dropped silently; the elite's order of two failed whole while two
-  // copies were already held. The override only raises this one item: 变形同构体 = 9.
+  // 变形同构体 is handed out by 缪尔赛思's trait (garrison_76: 1 normal / 2 elite) and band 变形者集群 at R5 / R10 / R15,
+  // and an earlier release keeps every copy (it never merges, is never sold and is never consumed). Its SHOP stock is
+  // the measured tier VI count (3, DESIGN §29.8) like every other tier-VI item; what an effect hands out is not gated by
+  // the shop stock and does not occupy it (`acquireItem`'s `noStock`, Match.rollItemId `ignoreStock`), so the trait and
+  // the strategy no longer run into the shop cap mid-match (the user's correction of 2026-10-12: "通过干员效果获得的装备
+  // 应该没有数量限制，商店里购买的变形同构体数量上限改回和其他等级六的装备一样").
   const itemStock = stockByName(items, { 简易通讯机: 5, 蜂鸣器: 6, 防暴盾: 6, 浓缩嗅盐: 6,
-    寻呼模块: 7, 伪装服: 7, 拉特兰桥夹: 7, 商业包装方案: 2, 变形同构体: 9 });
+    寻呼模块: 7, 伪装服: 7, 拉特兰桥夹: 7, 商业包装方案: 2 });
   const addendum = ctx.research.core?._criticAddendum || {};
   const multipliers = addendum.enemyStatMultipliers || DEFAULT_ENEMY_MULTIPLIERS;
   if (!addendum.enemyStatMultipliers) warn('config: using built-in enemy multiplier table (research 01 _criticAddendum missing)');
@@ -3724,6 +3725,8 @@ function buildConfig(ctx, waves, stages, bands, chess, items) {
       formula: 'one pool for every boss field ("所有人将一起对敌方领袖造成伤害"; the mirrored copies of a pair field share it, "两侧的敌方领袖共享生命值（敌方领袖的总生命值不变）") = bloodPoint[difficulty] × share. perPlayer true (the owner\'s decision of 2026-10-06, PR #209): co-op share = coop × the players alive when the fight starts (bots and AI 托管 seats count, eliminated and departed seats do not), at most aliveFull; solo share = solo (1). perPlayer false (the fixed pool of 0.1.x, 「保持固定血量」): co-op share = coop whatever the count (× alive / aliveFull with aliveScaling, the alive / 4 proportion [ASSUMED]: 巴哈姆特 12294); solo was 0.25 [ASSUMED]',
       perPlayer: true, coop: 1, solo: 1, aliveFull: 4, aliveScaling: false, aliveAssumed: true, unaffectedByEnemyScale: true,
     },
+    // Hidden-core layer threshold: a FLAT value per mode (upstream: co-op 1200). It does NOT scale with the number of
+    // players, so 20 seats need the same total as 4. (The capacity fork scaled it by living players / 4 — not adopted.)
     hiddenCore: { single: 350, multi: 1200, minTeamLpExclusive: 1, difficulties: ['NORMAL', 'HARD', 'ABYSS'], checkedAfterRound: 14 },
     dp: { init: 10, perSec: 1, max: 99 },
     unite: { maxHelpers: 2, helperOrder: 'unitsOnField>activeBond>undownedUnits; pair: unitsOnField>activeBond>activeLayers>undownedUnits, first = right field (PRTS 帮助)', layerGainsEnabled: false, keepsHpSpPositions: true, leakedEnemyFullHp: true,

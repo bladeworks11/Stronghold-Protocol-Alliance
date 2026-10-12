@@ -21,6 +21,24 @@ export class MatchSettle {
     // a 联防 battle that could not run at all (synthetic result) must not wipe the leakers' losses: charge their own leaks
     const uniteRan = !!(plan && uniteResult && !uniteResult.synthetic);
     const survivors = uniteRan ? uniteSurvivors(plan, uniteResult) : null;
+    // A round may run several 联防 waves (unite.js nextUnitePlan): every finished wave keeps its rewards, so the
+    // per-player coins / kills / damage of the whole round are the sum over the plan's history plus the last wave.
+    const uniteWaves = uniteRan ? [...(plan.history || []), uniteResult] : [];
+    const unitePerPlayer = (pid) => {
+      let coins = 0;
+      let kills = 0;
+      let damageDealt = 0;
+      let healingDone = 0;
+      for (const w of uniteWaves) {
+        const up = w && w.perPlayer && w.perPlayer[pid];
+        if (!up) continue;
+        coins += Math.max(0, Math.trunc(Number(up.coins) || 0));
+        kills += Number(up.killed) || 0;
+        damageDealt += Number(up.damageDealt) || 0;
+        healingDone += Number(up.healingDone) || 0;
+      }
+      return { coins, kills, damageDealt, healingDone };
+    };
     // The 联防's outcome as data for the SETTLE view (m.public.uniteResult, views.js; GitHub #235, PR #112 by @Convey123):
     // each client pops the official result box from it (ui/gameLogic/phases.js uniteResultBox) — `through` = the leakers'
     // enemies that still got through (uncapped; only decides whether 「全员无伤！」 is true), `losses` = every alive
@@ -48,11 +66,12 @@ export class MatchSettle {
       if (r.perfect !== false && counted === 0) ps.stats.perfectRounds++;
       // bounty coins (own battle + unite kills) are credited to the next prep
       let coins = Math.max(0, Math.trunc(Number(r.coins) || 0));
-      const up = uniteResult && uniteResult.perPlayer && uniteResult.perPlayer[ps.playerId];
-      if (up) {
-        coins += Math.max(0, Math.trunc(Number(up.coins) || 0));
-        ps.stats.dmgDealt += Number(up.damageDealt) || 0;
-        ps.stats.kills += Number(up.killed) || 0;
+      if (uniteWaves.length) {
+        const up = unitePerPlayer(ps.playerId);
+        coins += up.coins;
+        ps.stats.dmgDealt += up.damageDealt;
+        ps.stats.kills += up.kills;
+        ps.stats.healing += up.healingDone;
       }
       // perfect-payout bounties (战术特训): own phase perfect
       for (const b of ps.bounties) if (b.card.payout === 'perfect' && counted === 0 && r.perfect !== false) coins += b.card.coin;

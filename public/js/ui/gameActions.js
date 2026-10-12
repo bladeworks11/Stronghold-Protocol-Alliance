@@ -69,7 +69,9 @@ export const actions = {
   reward: (idx) => act('g.reward', { idx }),
   choice: (idx, choiceId) => act('g.choice', choiceId === undefined ? { idx } : { idx, choiceId }),
   ready: (ready) => act('g.ready', { ready }, { sfx: ready ? 'ready' : 'back' }),
-  emote: (id) => act('g.emote', { id }, { quiet: true }),
+  // a refused emote (the server's 1 s chatCD, a wrong phase) is reported like any other intent: a silent failure
+  // looked exactly like a dead button (owner report 2026-10-12)
+  emote: (id) => act('g.emote', { id }),
   // `playerId`: the player tapped in the team panel (a shared field shows two) — what an eliminated viewer follows
   watch: (fieldId, playerId = null) => act('g.watch', typeof playerId === 'string' && playerId ? { fieldId, playerId } : { fieldId }, { sfx: 'tab' }),
   autoplay: (on) => act('g.autoplay', { on }),

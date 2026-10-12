@@ -226,7 +226,9 @@ function MatchScreen() {
   const editable = phase === PHASE.PREP && !!priv && alive && !priv.ready && !watchingOther && !hasPersonalChoice;
   const showShop = !!priv && alive && (phase === PHASE.PREP || phase === PHASE.SP_DRAFT || phase === PHASE.ROUND_START) && !watchingOther;
   const layersDisabled = phase === PHASE.UNITE || isBossPhase(phase);
-  const sp = phase === PHASE.SP_DRAFT ? normalizeSp(pub?.sp, players) : null;
+  // 机变: a room of six or more gives every fixed card-pool group its own six-card page, so the viewer reads the page
+  // of its own group (m.private.spGroup) instead of the flat first-group fields of m.public.sp
+  const sp = phase === PHASE.SP_DRAFT ? normalizeSp(pub?.sp, players, { group: priv?.spGroup || null }) : null;
   const total = phaseTotalSeconds(pub, gd.config, myId);
   // solo pause: offered in the own battle; while m.public.paused every HUD clock stops at the pause moment
   const paused = isPaused(pub);
