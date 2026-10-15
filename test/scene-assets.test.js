@@ -12,8 +12,6 @@ import { fileURLToPath } from 'node:url';
 import { artPlan, formatSummary, isPlayerFile, isRefused } from '../tools/package.mjs';
 import { localGaps, sceneInstallPlan } from '../tools/setup.mjs';
 
-// fileURLToPath rather than `new URL(...).pathname`: the latter keeps a Windows file URL's leading `/E:/…` and
-// path.resolve then prepends the drive again (local Windows fix; upstream's suite runs on macOS).
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 test('sceneInstallPlan: fetch only with a client and extractor deps; otherwise the metal board', () => {
