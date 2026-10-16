@@ -7,6 +7,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { ERR, PHASE } from '../../shared/constants.js';
 import { makeMatch, DATA } from '../match/harness.js';
 import { teammateBands, timeoutBand, allowedBands, autoPickBand, draftClock, draftTip, draftSelection } from '../../public/js/screens/bandDraft.js';
@@ -335,5 +336,24 @@ describe('UI: one countdown and the highlighted band (user playtest #4 item 4)',
     assert.equal(m.draftTurn(), 'p_0');
     if (m.draft.order.length - m.draft.idx > 1) assert.deepEqual(m.handle('p_0', { t: 'g.bandSkip' }), { ok: true }, 'the co-op skip stays');
     m.dispose();
+  });
+
+  test('the order rows scroll in their own box, so 查看禁用盟约与干员 stays at the bottom (6–20 seats)', () => {
+    // a room at capacity puts twenty rows in the left column: they must scroll (.draft-order__list) instead of pushing
+    // the 本局信息 entry past the bottom of the screen (player report 2026-10-15)
+    const src = readFileSync(new URL('../../public/js/screens/bandDraft.js', import.meta.url), 'utf8');
+    const list = src.match(/<div class="draft-order__list">([\s\S]*?)<\/div>\n\s*<\$\{Button\}/);
+    assert.ok(list, 'the order rows live in their own container, right above the 本局信息 button');
+    assert.match(list[1], /class=\$\{cx\('dorder'/, 'the rows are inside it');
+    assert.doesNotMatch(list[1], /查看禁用盟约与干员/, 'the button is NOT inside the scrolling box');
+    assert.match(src, /<div class="draft-order__list">[\s\S]*<\/div>\s*<\$\{Button\}[^>]*data-testid="match-info-open"/,
+      'the button follows the scrolling box, so it is laid out at the bottom of the column');
+    const css = readFileSync(new URL('../../public/css/screens/draft.css', import.meta.url), 'utf8');
+    const rule = css.match(/\.draft-order__list \{([^}]*)\}/);
+    assert.ok(rule, '.draft-order__list is styled');
+    assert.match(rule[1], /overflow-y: auto/, 'the rows scroll');
+    assert.match(rule[1], /min-height: 0/, 'and may shrink below their content (a flex item would otherwise win)');
+    assert.match(rule[1], /flex: 1 1 auto/, 'the box takes the space the button and the tip leave');
+    assert.match(css, /\.draft-order__info \{[^}]*flex: none/, 'the button itself never shrinks');
   });
 });

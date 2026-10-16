@@ -37,13 +37,15 @@ export class MatchSpDraft {
     const untimed = this.soloUntimed;
     this.sp = {
       ...draft, order, idx: 0, picks: {}, taken: {}, untimed, turnDeadline: 0,
-      /** per fixed card-pool group: its own six-card page and who took which position (see _spGroups) */
-      groups: [], groupOf: new Map(), groupTaken: new Map(), cursor: 0,
+      /** per fixed card-pool group: its own six-card page and who took which position (see _initSpGroups) */
+      groups: [], groupOf: new Map(), groupTaken: new Map(), cursor: 0, cursorOf: new Map(),
     };
     this._initSpGroups();
     this.setDeadline(0);
     this.startSpTurn();
     this.markPublic();
+    // the seat's own page reaches it in m.private (spGroup): every seat needs its page's taken map and its own turn
+    for (const ps of this.order) this.markPrivate(ps);
   }
 
   /**
@@ -102,9 +104,47 @@ export class MatchSpDraft {
   spTurn() {
     const s = this.sp;
     if (!s) return null;
-    // grouped pages: every group advances along the SAME room order, so one position is one seat per group (see
-    // startSpTurn); a single-page room keeps the original seat-by-seat cursor. `groups` is absent on a plain fixture.
-    return spGrouped(s) ? (s.order[s.cursor] ?? null) : (s.order[s.idx] ?? null);
+    // grouped pages: the first page's own position (the room order's index `cursor` is the flat view's). A reader that
+    // needs "whose turn is it on THIS seat's page" asks spTurnOf(ps) / spAheadOf(ps), the per-page cursors.
+    if (spGrouped(s)) {
+      const first = s.order[Number.isInteger(s.cursor) ? s.cursor : 0] ?? null;
+      const page = s.groups.find((g) => g.playerIds.includes(first)) || s.groups[0];
+      return this.spTurnOf(page);
+    }
+    return s.order[s.idx] ?? null;
+  }
+
+  /**
+   * Whose turn it is on `page`: the next member of the page's group in the ROOM order that has not picked, starting at
+   * that page's own cursor. Every page has its own cursor for exactly this: when a page has no page-member left that
+   * still needs to pick, the room order moves on FOR THAT PAGE ONLY — the other pages stay on the seat they are at.
+   * @param {any} page s.groups[i], or s itself for the single-page room
+   */
+  spTurnOf(page) {
+    const s = this.sp;
+    if (!s || !page) return null;
+    if (!spGrouped(s)) return s.order[s.idx] ?? null;
+    for (let at = Number.isInteger(s.cursorOf.get(page.id)) ? s.cursorOf.get(page.id) : 0; at < s.order.length; at++) {
+      const pid = s.order[at];
+      if (page.playerIds.includes(pid) && s.picks[pid] == null && this.players.get(pid)?.alive) return pid;
+    }
+    return null;
+  }
+
+  /**
+   * The seats of `page` still to pick, in room order, from its own cursor on — what the client lists behind the
+   * picker. Its first entry IS the page's picker (spTurnOf): a seat reads `ahead[0]` as "whose turn is it here".
+   */
+  spAheadOf(page) {
+    const s = this.sp;
+    if (!s || !page) return [];
+    if (!spGrouped(s)) return this.spTurn() ? [this.spTurn()] : [];
+    const out = [];
+    for (let at = Number.isInteger(s.cursorOf.get(page.id)) ? s.cursorOf.get(page.id) : 0; at < s.order.length; at++) {
+      const pid = s.order[at];
+      if (page.playerIds.includes(pid) && s.picks[pid] == null && this.players.get(pid)?.alive) out.push(pid);
+    }
+    return out;
   }
 
   /** Whether `card` can still be taken: by `ps` when given (its own group's page), else on any group's page. */
@@ -124,7 +164,7 @@ export class MatchSpDraft {
     return this.spCardAvailable(card);
   }
 
-  /** Every group's live picker for the current room-order position. */
+  /** Every group's live picker, each on its own page and its own cursor — they pick in PARALLEL. */
   spActors() {
     const s = this.sp;
     if (!s) return [];
@@ -136,9 +176,9 @@ export class MatchSpDraft {
       return out;
     }
     for (const page of s.groups) {
-      const pid = s.order[s.cursor];
+      const pid = this.spTurnOf(page);
       const ps = pid ? this.players.get(pid) : null;
-      if (ps && ps.alive && s.picks[ps.playerId] == null && page.playerIds.includes(pid)) out.push(ps);
+      if (ps && ps.alive && s.picks[ps.playerId] == null) out.push(ps);
     }
     return out;
   }
@@ -147,17 +187,28 @@ export class MatchSpDraft {
     const s = this.sp;
     this.cancel(this._turnTimer);
     this._turnTimer = null;
+    if (!s) { this.finishSpDraft(); return; }
     const grouped = spGrouped(s);
-    // Advance past positions every group has already resolved, then past seats that need no pick (eliminated, or the
-    // seat is not a member of that group).
+    // Advance the cursors to a position that still needs a pick. A grouped room advances EVERY page that has nothing
+    // left where it stands — never another page's position, which is what used to strand a group behind its own room:
+    // the cursor a page runs out of work at is that page's own, so it alone moves on (see spTurnOf).
     for (let guard = 0; guard <= s.order.length + 1; guard++) {
       if (grouped) {
-        if (s.cursor >= s.order.length) break;
-        const pid = s.order[s.cursor];
-        const ps = this.players.get(pid);
-        const pending = s.groups.some((page) => page.playerIds.includes(pid) && ps && ps.alive && s.picks[pid] == null);
-        if (pending) break;
-        s.cursor++;
+        let moved = false;
+        for (const page of s.groups) {
+          let at = Number.isInteger(s.cursorOf.get(page.id)) ? s.cursorOf.get(page.id) : 0;
+          const at0 = at;
+          while (at < s.order.length) {
+            const pid = s.order[at];
+            const ps = this.players.get(pid);
+            if (page.playerIds.includes(pid) && ps && ps.alive && s.picks[pid] == null) break;
+            at++;
+          }
+          if (at === at0) continue; // this page is at its picker: it stays (it does not wait for the other pages')
+          s.cursorOf.set(page.id, at);
+          moved = true;
+        }
+        if (!moved) break;
       } else {
         while (s.idx < s.order.length) {
           const ps = this.players.get(s.order[s.idx]);
@@ -168,13 +219,11 @@ export class MatchSpDraft {
       }
     }
     const actors = this.spActors();
-    const anyOpen = grouped
-      ? actors.some((ps) => this.spPageOf(ps.playerId).cards.some((_c, i) => this.spCardOpen(ps, i)))
-      : (s.idx < s.order.length && s.cards.some((_c, i) => this.spCardOpen(this.players.get(this.spTurn()), i)));
+    const anyOpen = actors.some((ps) => this.spPageOf(ps.playerId).cards.some((_c, i) => this.spCardOpen(ps, i)));
     if (!actors.length || !anyOpen) {
-      if (grouped && s.cursor < s.order.length) {
-        // this position has nothing to pick anywhere (every page exhausted): close it and move on
-        s.cursor++;
+      if (grouped && s.groups.some((page) => (s.cursorOf.get(page.id) ?? 0) < s.order.length)) {
+        // nothing left to pick on any page that still has room: close those pages and look again
+        for (const page of s.groups) if ((s.cursorOf.get(page.id) ?? 0) < s.order.length) s.cursorOf.set(page.id, s.order.length);
         this.startSpTurn();
         return;
       }
@@ -182,6 +231,8 @@ export class MatchSpDraft {
       this.later(0, () => this.finishSpDraft());
       return;
     }
+    // the flat `cursor` mirrors the first page's own position (the client reads its own turn per page)
+    if (grouped) s.cursor = Math.min(...s.groups.map((page) => Number.isInteger(s.cursorOf.get(page.id)) ? s.cursorOf.get(page.id) : 0));
     const token = ++this._turnToken;
     if (!s.untimed) {
       const first = (grouped ? s.cursor : s.idx) === 0;
@@ -195,6 +246,9 @@ export class MatchSpDraft {
       this.setDeadline(0);
     }
     for (const ps of this.spActors()) if (ps.botControlled) this.scheduleSpBot(ps);
+    // a page's taken map and its own turn live in the seat's m.private (spGroup): refresh them for every seat whose
+    // page state can have changed (the pageless room reads m.public.sp alone and skips this)
+    if (grouped) for (const ps of this.order) this.markPrivate(ps);
     this.markPublic();
   }
 
@@ -223,8 +277,10 @@ export class MatchSpDraft {
     if (this.phase !== PHASE.SP_DRAFT || !this.sp) return fail(ERR.WRONG_PHASE);
     if (!ps.alive) return fail(ERR.ELIMINATED);
     if (this.sp.picks[ps.playerId] != null) return fail(ERR.ALREADY);
-    if (this.spTurn() !== ps.playerId) return fail(ERR.NOT_YOUR_TURN);
     const page = this.spPageOf(ps.playerId);
+    // the turn is the seat's OWN page's (spTurnOf): every group picks in parallel, so a seat is not held back by
+    // another group still deciding at its own position
+    if (this.spTurnOf(page) !== ps.playerId) return fail(ERR.NOT_YOUR_TURN);
     if (!Number.isInteger(idx) || idx < 0 || idx >= page.cards.length) return fail(ERR.BAD_TARGET);
     if (!this.spCardOpen(ps, idx)) return fail(ERR.SOLD_OUT);
     this._applyCard(ps, idx);
@@ -239,8 +295,14 @@ export class MatchSpDraft {
     if (!card || this.spTakenOf(page)[idx] != null) return;
     if (!this.spCardAvailable(card)) return;
     s.picks[ps.playerId] = idx;
-    if (spGrouped(s)) s.groupTaken.get(page.id)[idx] = ps.playerId;
-    else s.taken[idx] = ps.playerId;
+    if (spGrouped(s)) {
+      s.groupTaken.get(page.id)[idx] = ps.playerId;
+      // this page's position is decided: its own cursor moves past the seat (never another page's — they keep theirs)
+      const at = Number.isInteger(s.cursorOf.get(page.id)) ? s.cursorOf.get(page.id) : 0;
+      for (let i = Math.max(0, at); i < s.order.length; i++) {
+        if (s.order[i] === ps.playerId) { s.cursorOf.set(page.id, i + 1); break; }
+      }
+    } else s.taken[idx] = ps.playerId;
     try { applyCard(this, ps, card); } catch (e) { this.reportError(`applyCard ${card.id}`, e); }
     this.markPrivate(ps);
     this.markPublic();

@@ -2,6 +2,11 @@
 // data files and answers `g.*` intents with a small in-browser mock server (buy / sell / move / equip /
 // refresh / freeze / level / ready / reward / choice / band …), so drag & drop and every button can be
 // exercised. Combat phases stream b.snap / b.ev at 20 Hz through net._emit like the real socket.
+//
+// `?seats=N` (1–20) fills the room up to N seats: 6+ seats reach the layouts only a big room has — the 20-row
+// strategy draft order list (the 本局信息 entry under it) and the 机变 step's one six-card page per fixed card-pool
+// group, whose per-group turn and taken map mirror the server (shared/playerCapacity.js poolGroupSizes,
+// server/match/match/spDraft.js).
 
 import '/js/ui/compat.js';
 import { render } from '/vendor/preact.module.js';
@@ -19,6 +24,7 @@ import { settingsStore } from '/js/ui/settings.js';
 import { awayStore } from '/js/ui/matchChrome.js';
 import { GAME_FILES } from '/js/ui/gameComponents.js';
 import { PHASE, GEO } from '/shared/constants.js';
+import { poolGroupSizes } from '/shared/playerCapacity.js';
 
 const params = new URLSearchParams(location.search);
 const SHOT = params.get('shot') === '1';
@@ -26,6 +32,12 @@ const VARIANTS = new Set((params.get('variant') || '').split(',').filter(Boolean
 // the match's stage (data/stages.json id): ?stage=act1autochess_m01 boards a stage whose own devices (crates / turrets)
 // stand on the prep field — the default act2autochess_m01 keeps its blowers and turrets off it (rows 6 / 8 / 13)
 const STAGE_ID = params.get('stage') || 'act2autochess_m01';
+/**
+ * Seats in the mocked room, 1–20 (`?seats=20`): a 6+ room is what the strategy draft's order list and the grouped 机变
+ * pages look like at capacity (the real server splits 6+ into fixed card-pool groups, playerCapacity.js). The seat
+ * rows are built here, before the state so every phase (and the private view's spGroup) sees them.
+ */
+const SEATS = Math.max(1, Math.min(20, Number(params.get('seats')) || 4));
 
 // ---- deterministic rng ----------------------------------------------------------------------------------
 let seed = 20260927;
@@ -34,11 +46,20 @@ const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
 const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
 const ME = 'p1';
-const PLAYERS = [
+const BASE_PLAYERS = [
   { playerId: 'p1', seat: 0, name: '凯尔希', isBot: false, bandId: 'band_bldsk' },
   { playerId: 'ai_2', seat: 1, name: 'AI·华法琳', isBot: true, bandId: 'band_sarkazb' },
   { playerId: 'p3', seat: 2, name: 'Doctor·B', isBot: false, bandId: 'band_amiya' },
   { playerId: 'p4', seat: 3, name: '灰烬', isBot: false, bandId: 'band_amedic' },
+];
+/** ?seats=N: the four hand-written seats, then named teammate seats up to N (`p5`… / an AI seat every third). */
+const PLAYERS = SEATS <= BASE_PLAYERS.length ? BASE_PLAYERS.slice(0, SEATS) : [
+  ...BASE_PLAYERS,
+  ...Array.from({ length: SEATS - BASE_PLAYERS.length }, (_, k) => {
+    const index = BASE_PLAYERS.length + k;
+    const isBot = index % 3 === 2;
+    return { playerId: isBot ? `ai_${index}` : `p${index}`, seat: index, name: isBot ? `AI·队友${index}` : `博士·${index}`, isBot, bandId: null };
+  }),
 ];
 
 let uidSeq = 100;
@@ -105,6 +126,9 @@ function refreshPrivate() {
   p.deployCount = p.board.filter((x) => x.kind === 'chess').length;
   p.bonds = computeBonds(p);
   p.canReady = !p.personalChoice && !p.temp.some(Boolean);
+  // m.private.spGroup (the seat's own 机变 page, server/match/player/views.js): the draft case sets it, the other
+  // phases keep it null like the server does outside SP_DRAFT
+  p.spGroup = S.spGroup || null;
   const upg = [5, 8, 11, 12, 13];
   p.shop.maxLevel = 6;
   if (p.shop.upgradePrice == null) p.shop.upgradePrice = upg[p.shop.level - 1] ?? 0;
@@ -198,8 +222,8 @@ function buildState() {
   }
 
   const players = PLAYERS.map((p, i) => ({
-    ...p, connected: i !== 3 || true, alive: true, lp: [24, 31, 18, 5][i], shopLevel: [4, 5, 3, 4][i], boardCount: [7, 8, 6, 7][i],
-    ready: [false, true, false, false][i], bonds: [], fieldId: `n:${p.playerId}`, status: ['acting', 'ready', 'acting', 'acting'][i],
+    ...p, connected: i !== 3 || true, alive: true, lp: [24, 31, 18, 5, 12][i % 5], shopLevel: [4, 5, 3, 4, 2][i % 5], boardCount: [7, 8, 6, 7, 5][i % 5],
+    ready: i % 4 === 1, bonds: [], fieldId: `n:${p.playerId}`, status: i % 4 === 1 ? 'ready' : 'acting',
   }));
   players[3].connected = false;
   // boss-round prep (最终攻势 prep on the own half of the boss field): `boss` = the left half; `bossR` = seats swapped so
@@ -213,7 +237,7 @@ function buildState() {
     hiddenBossId: 'boss_8', teamLp: null, bossHp: null, draft: null, sp: null, players, fields: [],
   };
   if (VARIANTS.has('boss') || VARIANTS.has('bossR')) pub.round = pub.bossRound;
-  S = { stage, pub, priv, layers: {}, battle: null, pool, requests: [] };
+  S = { stage, pub, priv, layers: {}, battle: null, pool, requests: [], spGroup: null };
 }
 
 /**
@@ -309,8 +333,13 @@ function setPhase(phase, variant) {
       pub.players.forEach((p) => { p.bandId = null; p.status = 'deciding'; p.ready = false; });
       S.priv.bandId = null;
       if (!solo) {
-        pub.draft = { order: ['p3', 'p1', 'ai_2', 'p4'], turn: 'p1', picks: { p3: 'band_sarkazb' }, skipsLeft: { p1: 1, p3: 1, ai_2: 1, p4: 1 }, turnDeadline: Date.now() + 9000 };
-        pub.players.find((p) => p.playerId === 'p3').bandId = 'band_sarkazb';
+        // ?seats=N: the whole room decides one after another — N rows in the order list (the layout the 本局信息 entry
+        // must stay visible under at 6–20 seats; bandDraft.js / draft.css .draft-order__list)
+        const order = [ME, ...PLAYERS.slice(1).map((p) => p.playerId)];
+        const first = order.find((id) => id !== ME);
+        const picks = first ? { [first]: 'band_sarkazb' } : {};
+        pub.draft = { order, turn: ME, picks, skipsLeft: Object.fromEntries(order.map((id) => [id, 1])), turnDeadline: Date.now() + 9000 };
+        if (first) pub.players.find((p) => p.playerId === first).bandId = 'band_sarkazb';
       } else pub.deadline = 0;
       break;
     case PHASE.BATTLE_CHECK:
@@ -320,16 +349,51 @@ function setPhase(phase, variant) {
       pub.round = 9; pub.deadline = Date.now() + 14000;
       const fam = VARIANTS.has('supply') ? 'supply' : VARIANTS.has('shop') ? 'shop' : VARIANTS.has('tactic') ? 'tactic' : 'bounty';
       const ch = data.get('choices');
-      let cards;
-      if (fam === 'supply') cards = shuffle(shopItems().filter((i) => i.tier >= 3)).slice(0, 6).map((i) => ({ itemId: i.id }));
-      // the official 机密商店 of match 8 R11 (test/fixtures/official-bounty-drafts.json): the same item twice
-      else if (fam === 'shop') cards = ['变形同构体', '盟约之币', '商业包装方案', '变形同构体', '天马之盔', '双模机械臂'].map((n) => ({ itemId: shopItems().find((i) => i.name === n).id }));
-      // the official 战术决策 of match 7 R11 (test/fixtures/official-bounty-drafts.json): the same card twice
-      else if (fam === 'tactic') cards = ['补给', '补给', '谢拉格驰援', '列装', '莫斯提马的盟誓', '升华'].map((n) => ({ effectId: ch.cards.tactic.find((t) => t.name === n).effectId }));
-      else cards = shuffle(ch.cards.bounty.filter((b) => b.draft !== false)).slice(0, 6).map((b) => ({ effectId: b.effectId }));
-      if (solo) { cards = cards.slice(0, 3); pub.deadline = 0; }
-      pub.sp = { family: fam, cards, order: solo ? ['p1'] : ['p4', 'p1', 'ai_2', 'p3'], turn: solo ? 'p1' : 'p1', picks: solo ? {} : { p4: 2 }, untimed: solo };
-      pub.players.forEach((p) => { p.status = p.playerId === 'p4' ? 'ready' : 'deciding'; });
+      const draw = (n) => {
+        if (fam === 'supply') return shuffle(shopItems().filter((i) => i.tier >= 3)).slice(0, n).map((i) => ({ itemId: i.id }));
+        // the official 机密商店 of match 8 R11 (test/fixtures/official-bounty-drafts.json): the same item twice
+        if (fam === 'shop') return ['变形同构体', '盟约之币', '商业包装方案', '变形同构体', '天马之盔', '双模机械臂'].slice(0, n).map((name) => ({ itemId: shopItems().find((i) => i.name === name).id }));
+        // the official 战术决策 of match 7 R11 (test/fixtures/official-bounty-drafts.json): the same card twice
+        if (fam === 'tactic') return ['补给', '补给', '谢拉格驰援', '列装', '莫斯提马的盟誓', '升华'].slice(0, n).map((name) => ({ effectId: ch.cards.tactic.find((t) => t.name === name).effectId }));
+        return shuffle(ch.cards.bounty.filter((b) => b.draft !== false)).slice(0, n).map((b) => ({ effectId: b.effectId }));
+      };
+      const cards = solo ? draw(3) : draw(6);
+      // the room order the server shuffles (co-op): the mock keeps it deterministic, my seat last
+      const order = solo ? [ME] : [...PLAYERS.slice(1).map((p) => p.playerId), ME];
+      // 6+ seats: one page per fixed card-pool group (playerCapacity.js group layouts) — each group has its OWN six
+      // cards and its own turn, and the seats of a group pick in parallel (server spDraft.js spTurnOf, DESIGN §21.28)
+      const grouped = !solo && SEATS >= 6;
+      const layout = [...poolGroupSizes(SEATS)];
+      const members = [];
+      for (let at = 0, id = 1; id <= layout.length; id++) {
+        const size = layout[id - 1];
+        members.push({ id, playerIds: PLAYERS.slice(at, at + size).map((p) => p.playerId) });
+        at += size;
+      }
+      const memberOf = (id) => members.find((m) => m.playerIds.includes(id));
+      const untimed = solo;
+      if (untimed) pub.deadline = 0;
+      // one pick already made per group (its first member in the order), so the screenshots show a started draft
+      const done = new Map();
+      const groups = grouped ? members.map((m) => {
+        const taken = {};
+        const first = order.find((id) => m.playerIds.includes(id));
+        if (first && first !== ME) taken[0] = first;
+        const turn = order.find((id) => m.playerIds.includes(id) && !(id in taken)) || null;
+        return { id: m.id, members: m.playerIds.slice(), turn, cards: draw(6), taken };
+      }) : null;
+      for (const g of groups || []) for (const [idx, pid] of Object.entries(g.taken)) done.set(pid, Number(idx));
+      const myGroup = grouped ? memberOf(ME) : null;
+      const myPage = groups && groups.find((g) => g.id === myGroup.id);
+      pub.sp = {
+        family: fam, cards: groups ? groups[0].cards : cards, order,
+        turn: groups ? groups[0].turn : (solo ? ME : order[0]),
+        picks: Object.fromEntries(done), taken: groups ? groups[0].taken : (done.size ? { 0: order[0] } : {}), untimed,
+      };
+      if (groups) pub.sp.groups = groups;
+      S.spGroup = myGroup ? { id: myGroup.id, members: myPage.members.slice(), taken: { ...myPage.taken } } : null;
+      S.priv.spGroup = S.spGroup ? { ...S.spGroup, taken: { ...S.spGroup.taken } } : null;
+      pub.players.forEach((p) => { p.status = done.has(p.playerId) ? 'ready' : 'deciding'; });
       break;
     }
     case PHASE.COMBAT: case PHASE.UNITE: case PHASE.SETTLE: case PHASE.FINAL_ASSAULT: case PHASE.HIDDEN_CORE:

@@ -15,6 +15,7 @@ import {
   rangeGridBox, shortcutFor, sanitizeSettings, DEFAULT_SETTINGS, normalizeResult, cycleField, fieldLabel, homeFieldId,
   activeBubbles, sortedPlayers, tileKey, prepCapsuleLabel, prepCamera, dropFailureReason, terrainInfo,
 } from '../../public/js/ui/gameLogic.js';
+import { cardPickable } from '../../public/js/ui/choiceOverlay.js';
 import { PHASE, GEO } from '../../shared/constants.js';
 import { setLang, setMessages } from '../../shared/i18n.js';
 
@@ -598,6 +599,7 @@ describe('drafts', () => {
     assert.deepEqual(flat.cards.map((c) => c.id), ['first', 'first2']);
     assert.equal(flat.groupId, null);
     assert.equal(flat.cards[0].takenBy, 'p_0', 'the flat taken map is the first group one');
+    assert.equal(flat.turnPid, 'p_1', 'the flat turn is the single page turn');
     // group 2 sees ITS cards and ITS taken positions
     const g2 = normalizeSp(pub, players, { group: { id: 2, members: ['p_4', 'p_5'], taken: { 1: 'p_5' } } });
     assert.deepEqual(g2.cards.map((c) => c.id), ['g2a', 'g2b'], 'the second group own page');
@@ -611,6 +613,41 @@ describe('drafts', () => {
     // a group id the payload does not carry falls back to the flat fields rather than rendering nothing
     const missing = normalizeSp(pub, players, { group: { id: 9, members: ['p_9'], taken: {} } });
     assert.deepEqual(missing.cards.map((c) => c.id), ['first', 'first2']);
+  });
+  test('normalizeSp: each group page carries its OWN turn (the groups decide in parallel)', () => {
+    // a six-player room: one page per fixed group, each with the seat it is waiting for (server spTurnOf)
+    const order = ['p_5', 'p_0', 'p_4', 'p_1', 'p_3', 'p_2'];
+    const pub = {
+      family: 'bounty', order, turn: 'p_5', picks: { p_5: 0, p_4: 1 },
+      cards: [{ id: 'first' }], taken: { 0: 'p_5' },
+      groups: [
+        { id: 1, members: ['p_0', 'p_1', 'p_2'], turn: 'p_0', ahead: ['p_0', 'p_1', 'p_2'], cards: [{ id: 'g1a' }, { id: 'g1b' }], taken: {} },
+        { id: 2, members: ['p_3', 'p_4', 'p_5'], turn: 'p_3', ahead: ['p_3'], cards: [{ id: 'g2a' }, { id: 'g2b' }], taken: { 1: 'p_4' } },
+      ],
+    };
+    // group 1's seats read their own page: p_0 is the picker even though the flat turn says p_5 (group 2's seat)
+    const g1 = normalizeSp(pub, players, { group: { id: 1, members: ['p_0', 'p_1', 'p_2'], taken: {} } });
+    assert.equal(g1.turnPid, 'p_0', 'group 1 own turn, not the first page / flat one');
+    assert.equal(cardPickable(g1, g1.cards[0], { myId: 'p_0', solo: false }), true, 'p_0 may pick on its page');
+    assert.equal(cardPickable(g1, g1.cards[0], { myId: 'p_2', solo: false }), false, 'a later group-mate still waits');
+    // the room-wide picks map never marks a position of ANOTHER group: p_5 and p_4 took 0 and 1 on the other page,
+    // and g1's own positions stay free (a leaked index used to grey out the seat's own options)
+    assert.deepEqual(g1.cards.map((c) => c.takenBy), [null, null], 'no other group position leaks in');
+    assert.equal(g1.pickOf.has('p_5'), false, 'another group pick is not mine to show');
+    // group 2's page is at p_3 (p_4 is done): its own remaining seat counts down, not the room-wide one
+    const g2 = normalizeSp(pub, players, { group: { id: 2, members: ['p_3', 'p_4', 'p_5'], taken: { 1: 'p_4' } } });
+    assert.equal(g2.turnPid, 'p_3');
+    assert.equal(g2.pickOf.has('p_4'), true, 'its own group-mate pick is known');
+    assert.equal(g2.cards[1].takenBy, 'p_4', 'and it marks that page position');
+    // a page that names no turn (an older server) still resolves through the page's own members
+    const legacy = normalizeSp({ ...pub, groups: [{ id: 1, members: ['p_0', 'p_1', 'p_2'], cards: [{ id: 'g1a' }, { id: 'g1b' }], taken: {} }] },
+      players, { group: { id: 1, members: ['p_0', 'p_1', 'p_2'], taken: {} } });
+    assert.equal(legacy.turnPid, 'p_0', 'first member of the page still to pick');
+    // ... and a page whose members have all picked names nobody (the overlay then shows no turn at all)
+    const done = normalizeSp({ ...pub, picks: { p_0: 0, p_1: 1 }, groups: [{ id: 1, members: ['p_0', 'p_1'], cards: [{ id: 'g1a' }, { id: 'g1b' }], taken: { 0: 'p_0', 1: 'p_1' } }] },
+      players, { group: { id: 1, members: ['p_0', 'p_1'], taken: { 0: 'p_0', 1: 'p_1' } } });
+    assert.equal(done.turnPid, null);
+    assert.deepEqual(done.cards.map((c) => c.takenBy), ['p_0', 'p_1']);
   });
   test('personal choice: only the living recipient in the current PREP, independent of the public draft', () => {
     const pub = { phase: PHASE.PREP, round: 14, sp: { family: 'supply', cards: ['global'] } };

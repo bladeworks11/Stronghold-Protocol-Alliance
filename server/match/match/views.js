@@ -139,21 +139,25 @@ export class MatchViews {
     }
     if (this.phase === PHASE.SP_DRAFT && this.sp) {
       const s = this.sp;
-      // A room of six or more gives every fixed group its OWN six-card page (spDraft.js _initSpGroups), so the flat
-      // `cards` / `taken` below are the first group's page — the one the viewer sees is `spGroup` in its private view.
-      // `groups` may be absent (a five-player room, a plain fixture): the single room-wide page is the fallback.
+      // A room of six or more gives every fixed group its OWN six-card page (spDraft.js _initSpGroups) and every page
+      // its own turn (spTurnOf: the pages pick in PARALLEL), so the flat `cards` / `taken` / `turn` below are the first
+      // page's — the page a seat actually chooses from is `spGroup` in its private view, and the turn of that page is
+      // `groups[].turn`. `groups` may be absent (a five-player room, a plain fixture): the single room-wide page is
+      // the fallback, and there the flat fields are the whole truth.
       const pages = Array.isArray(s.groups) && s.groups.length ? s.groups : null;
       const first = pages ? pages[0] : null;
       const cardsOf = (page) => page.cards.map(c => ({ ...cardView(c), soldOut: c.kind === 'item' && !this.itemPool.canGain(c.id) }));
+      // the turn of the page handed to that seat: the server method when a page is given, else the room-wide one
+      const pageTurn = (page) => (page && typeof this.spTurnOf === 'function' ? this.spTurnOf(page) : this.spTurn());
       v.sp = {
         family: s.family, name: s.name, desc: s.desc, eventId: s.eventId,
         cards: cardsOf(first || s), order: s.order.slice(),
-        turn: this.spTurn(), picks: { ...s.picks },
+        turn: pageTurn(first), ahead: this.spAheadOf(first || s), picks: { ...s.picks },
         taken: { ...((first ? s.groupTaken.get(first.id) : s.taken) || {}) }, untimed: !!s.untimed,
       };
       if (pages) {
         v.sp.groups = pages.map((page) => ({
-          id: page.id, members: page.playerIds.slice(),
+          id: page.id, members: page.playerIds.slice(), turn: pageTurn(page), ahead: this.spAheadOf(page),
           cards: cardsOf(page), taken: { ...(s.groupTaken.get(page.id) || {}) },
         }));
       }

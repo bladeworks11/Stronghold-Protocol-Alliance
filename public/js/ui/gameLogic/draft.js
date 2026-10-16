@@ -42,9 +42,10 @@ export function normalizeDraft(draft, players = []) {
  * Cards: string ids or objects; picks: {playerId: cardIdx} | [{playerId, idx}] | card.takenBy.
  *
  * A room of six or more runs one 机变 page per fixed card-pool group (server/match/match/spDraft.js _initSpGroups):
- * m.public.sp then carries `groups`, each with its own six cards and its own `taken`, and the flat `cards` / `taken`
- * are the first group's. `opts.group` (the viewer's own `m.private.spGroup`, i.e. { id, members, taken }) selects the
- * page the viewer actually chooses from, so the cards shown and the index sent back match the group.
+ * m.public.sp then carries `groups`, each with its own six cards, its own `taken` and its OWN `turn` (the groups pick
+ * in parallel — server spTurnOf), and the flat `cards` / `taken` / `turn` are the first group's. `opts.group` (the
+ * viewer's own `m.private.spGroup`, i.e. { id, members, taken }) selects the page the viewer actually chooses from, so
+ * the cards shown, the indices sent back and the turn the overlay names all belong to the viewer's own group.
  * @param {any} sp
  * @param {any[]} [players]
  * @param {{ group?: { id?: number, members?: string[], taken?: Record<string, string> } | null }} [opts]
@@ -64,21 +65,32 @@ export function normalizeSp(sp, players = [], opts = {}) {
   });
   const takenBy = new Map(); // idx → playerId
   const pickOf = new Map(); // playerId → idx
-  const src = sp.picks;
   const add = (pid, idx) => {
     if (typeof pid !== 'string' || !Number.isInteger(idx) || idx < 0 || idx >= cards.length) return;
     takenBy.set(idx, pid);
     pickOf.set(pid, idx);
   };
+  const src = sp.picks;
+  // m.public.sp.picks is the ROOM-WIDE map (playerId → position on that seat's OWN page). On a grouped room a
+  // position of another group says nothing about this page — index 2 is taken on the other page, free here — so
+  // only the page's own members are read from it; the page's own `taken` map (below) is the truth about positions.
+  // Without a page (a single-page room, an older server) every seat of the room picks on the same six cards.
+  const picksWholeRoom = !page || !Array.isArray(page.members);
   if (Array.isArray(src)) src.forEach((v, i) => { if (isObj(v)) add(v.playerId, v.idx); else if (Number.isInteger(v) && order[i]) add(order[i], v); });
-  else if (isObj(src)) for (const [k, v] of Object.entries(src)) add(k, v);
+  else if (isObj(src)) for (const [k, v] of Object.entries(src)) { if (picksWholeRoom || page.members.includes(k)) add(k, v); }
   // the taken positions of the SELECTED page; without a group page the flat (first-group) map applies
   if (isObj(srcTaken)) for (const [k, v] of Object.entries(srcTaken)) add(v, Number(k));
   for (const c of cards) if (c.takenBy) add(c.takenBy, c.idx);
   for (const c of cards) c.takenBy = takenBy.get(c.idx) ?? null;
-  let turnPid = null;
-  if (typeof sp.turn === 'string') turnPid = sp.turn;
-  else if (Number.isInteger(sp.turn) && sp.turn >= 0 && sp.turn < order.length) turnPid = order[sp.turn];
+  // whose turn it is ON THE SELECTED PAGE: a grouped room names it per page (`groups[].turn` — the server's spTurnOf;
+  // its `ahead` list, the seats the page still waits for, is the same answer), the pageless room through the flat turn.
+  // A page that names neither (an older server) falls back to the page's own members in the room order.
+  const pageTurn = page
+    ? (turnOf(page, order) ?? (Array.isArray(page.members)
+      ? order.find((pid) => page.members.includes(pid) && !pickOf.has(pid)) ?? null
+      : null))
+    : null;
+  const turnPid = page ? pageTurn : turnOf(sp, order);
   return {
     family: typeof sp.family === 'string' ? sp.family : null,
     name: typeof sp.name === 'string' && sp.name ? sp.name : null,
@@ -88,6 +100,20 @@ export function normalizeSp(sp, players = [], opts = {}) {
     /** the id of the group page these cards belong to (null when the room runs one page for everybody) */
     groupId: page ? page.id : null,
   };
+}
+
+/**
+ * A turn record as a playerId: `turn` (a playerId or an index into the room order), else `ahead[0]` (the seats the
+ * page still waits for — the picker first). Null when the record names nobody.
+ * @param {any} rec m.public.sp, one of its `groups`, or a bare { turn } object
+ * @param {string[]} order the room order an index turn counts in
+ */
+function turnOf(rec, order = []) {
+  if (!isObj(rec)) return null;
+  if (typeof rec.turn === 'string' && rec.turn) return rec.turn;
+  if (Number.isInteger(rec.turn) && rec.turn >= 0 && rec.turn < order.length) return order[rec.turn];
+  if (Array.isArray(rec.ahead) && typeof rec.ahead[0] === 'string') return rec.ahead[0];
+  return null;
 }
 
 /** Adapt only the recipient's current PREP choice; never write it into the public draft. */

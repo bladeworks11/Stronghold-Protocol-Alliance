@@ -219,3 +219,74 @@ test('two groups may hold the same 机变 card at the same position', () => {
   for (const pid of picked) assert.equal(s.picks[pid], 0, `${pid} took position 0`);
   m.dispose();
 });
+
+test('every page has a turn of its OWN: the groups decide in parallel, never waiting for one another', () => {
+  const h = spDraftOf(8);
+  const m = h.m;
+  const s = m.sp;
+  const [a, b] = s.groups;
+  const pickerOf = (page) => m.spAheadOf(page).find((pid) => page.playerIds.includes(pid));
+  const [firstA, firstB] = [pickerOf(a), pickerOf(b)];
+  assert.notEqual(firstA, firstB, 'the two pages are waiting for two different seats');
+  assert.ok(firstA && firstB, 'each page names one of its own members');
+  // the pending list starts at that seat (the page's own cursor) and never mentions another group
+  assert.equal(m.spAheadOf(a)[0], firstA);
+  assert.equal(m.spAheadOf(a)[0], m.spTurnOf(a), 'the pending list starts at the page picker');
+  assert.equal(m.spAheadOf(a).length, a.playerIds.length, 'every member of the group is still to pick');
+  assert.deepEqual(m.spAheadOf(a).filter((pid) => b.playerIds.includes(pid)), [], 'never another group member');
+  // BOTH of them may pick right now — either one used to be refused with NOT_YOUR_TURN while the room order sat on the
+  // other group's seat (the client then drew the first page's cards under a "someone else is deciding" banner)
+  assert.equal(m.spTurnOf(a), firstA);
+  assert.equal(m.spTurnOf(b), firstB);
+  assert.deepEqual(m.pickCard(m.players.get(firstA), 0), { ok: true }, `${firstA} picks on its own page`);
+  assert.deepEqual(m.pickCard(m.players.get(firstB), 1), { ok: true }, `${firstB} picks on its own page`);
+  assert.equal(s.picks[firstA], 0);
+  assert.equal(s.picks[firstB], 1);
+  // each page moved on by itself: group A's next member is its own, not the room cursor's seat
+  const nextA = pickerOf(a);
+  const nextB = pickerOf(b);
+  assert.notEqual(nextA, firstA);
+  assert.notEqual(nextB, firstB);
+  assert.ok(a.playerIds.includes(nextA) && b.playerIds.includes(nextB));
+  assert.equal(m.spTakenOf(a)[0], firstA, 'position 0 is taken on group A page');
+  assert.equal(m.spTakenOf(b)[1], firstB, 'position 1 is taken on group B page');
+  assert.equal(m.spTakenOf(b)[0] ?? null, null, 'group B position 0 stays free for its other members');
+  m.dispose();
+});
+
+test('the published sp names each page turn, so a client can tell whose turn it is without guessing', () => {
+  const h = spDraftOf(20);
+  const m = h.m;
+  const sp = m.publicView().sp;
+  assert.equal(sp.groups.length, 5);
+  for (const g of sp.groups) {
+    const page = m.sp.groups.find((p) => p.id === g.id);
+    assert.equal(g.turn, m.spTurnOf(page), `group ${g.id} turn`);
+    assert.ok(g.members.includes(g.turn), `group ${g.id}: the turn is one of its own members`);
+    assert.deepEqual(g.ahead, m.spAheadOf(page), `group ${g.id} pending list`);
+    // every page holds six options for its own four seats, and none of them is taken yet
+    assert.equal(g.cards.length, 6);
+    assert.deepEqual(g.taken, {});
+  }
+  // one seat per page may pick at once: five actors, one from each group, all different seats
+  const actors = m.spActors().map((ps) => ps.playerId);
+  assert.equal(actors.length, 5);
+  assert.equal(new Set(actors).size, 5);
+  for (const g of sp.groups) assert.ok(actors.includes(g.turn), `group ${g.id} picker acts`);
+  m.dispose();
+});
+
+test('a seat that is eliminated before its turn never holds its page back', () => {
+  const h = spDraftOf(8);
+  const m = h.m;
+  const [a] = m.sp.groups;
+  const order = m.spAheadOf(a);
+  assert.ok(order.length >= 2);
+  const second = order[1];
+  m.players.get(second).alive = false;
+  const after = m.spAheadOf(a);
+  assert.ok(!after.includes(second), 'the eliminated seat is no longer waited for');
+  assert.equal(after[0], order[0], 'the picker stays the picker');
+  assert.equal(m.spTurnOf(a), order[0]);
+  m.dispose();
+});
