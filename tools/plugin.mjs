@@ -199,7 +199,9 @@ export async function main(argv) {
     try {
       const file = path.join(tmp,'set.json'); fs.writeFileSync(file,JSON.stringify(set));
       const env = {...process.env,SP_PLUGIN_TEST_SET:file}; delete env.NODE_TEST_CONTEXT;
-      const r = spawnSync(process.execPath,['--import',path.join(REPO,'server/plugins/scriptTestSetup.js'),'--test',...tests],{
+      // `--import` takes a specifier, not a path: on Windows a bare `E:\…` path is read as the URL scheme "e:" and
+      // Node throws ERR_UNSUPPORTED_ESM_URL_SCHEME before any test runs (pathToFileURL is already imported above).
+      const r = spawnSync(process.execPath,['--import',pathToFileURL(path.join(REPO,'server/plugins/scriptTestSetup.js')).href,'--test',...tests],{
         stdio:'inherit',env,timeout:120000,
       });
       return r.status ?? 1;
