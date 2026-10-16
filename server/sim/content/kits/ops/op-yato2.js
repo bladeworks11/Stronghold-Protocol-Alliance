@@ -94,7 +94,7 @@ export default {
             if (!m) return;
             const [fr, fc] = unit.fwd;
             const due = Math.min(S2_SLASHES, Math.floor((skill.duration - skill.timeLeft) / (S2_SPAN / S2_SLASHES)) + 1);
-            while (m.n < due) {
+            while (m.n < due) { // loop-cap: S2_SLASHES (due is min() of it)
               m.n++;
               slash(battle, unit, unit.x + fc, unit.y + fr, SLASH_RADIUS, s2Scale, 'yato2:blade');
             }
@@ -121,7 +121,7 @@ export default {
             // a timeLeft at or below 0 ends the skill on the next tick (skills.js `_tick`), which would cut the dash off.
             skill.timeLeft = Math.max(skill.timeLeft, dt + 1e-3);
             m.acc += dt;
-            while (!m.done && m.acc + 1e-9 >= S3_STEP) {
+            while (!m.done && m.acc + 1e-9 >= S3_STEP) { // loop-cap: dashStep sets m.done, one S3_STEP a pass
               m.acc -= S3_STEP;
               dashStep(battle, unit, m);
             }

@@ -221,7 +221,7 @@ export default {
       const [fr, fc] = unit.fwd;
       const grid = skillRec(chess, S2)?.rangeGrid ?? null;
       const foes = grid ? enemiesInGrid(battle, unit, grid) : battle.enemiesInKeys(unit.rangeKeys, unit, { canHitFly: true });
-      while (m.n < due) {
+      while (m.n < due) { // loop-cap: S2_VOLLEYS.length (due is min() of it)
         m.n++;
         spendBoost(unit);   // 每轮技能三/四/五连击 burns one stack
         for (const e of foes) {

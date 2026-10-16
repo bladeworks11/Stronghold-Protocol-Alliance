@@ -192,13 +192,13 @@ export class MatchSpDraft {
     // Advance the cursors to a position that still needs a pick. A grouped room advances EVERY page that has nothing
     // left where it stands — never another page's position, which is what used to strand a group behind its own room:
     // the cursor a page runs out of work at is that page's own, so it alone moves on (see spTurnOf).
-    for (let guard = 0; guard <= s.order.length + 1; guard++) {
+    for (let guard = 0; guard <= s.order.length + 1; guard++) { // loop-cap: the room order plus one, see the guard
       if (grouped) {
         let moved = false;
         for (const page of s.groups) {
           let at = Number.isInteger(s.cursorOf.get(page.id)) ? s.cursorOf.get(page.id) : 0;
           const at0 = at;
-          while (at < s.order.length) {
+          while (at < s.order.length) { // loop-cap: draft order, one page position a pass
             const pid = s.order[at];
             const ps = this.players.get(pid);
             if (page.playerIds.includes(pid) && ps && ps.alive && s.picks[pid] == null) break;
@@ -210,7 +210,7 @@ export class MatchSpDraft {
         }
         if (!moved) break;
       } else {
-        while (s.idx < s.order.length) {
+        while (s.idx < s.order.length) { // loop-cap: draft order
           const ps = this.players.get(s.order[s.idx]);
           if (ps && ps.alive && s.picks[ps.playerId] == null) break;
           s.idx++;
@@ -387,26 +387,35 @@ export class MatchSpDraft {
    * Random item id: a choices.json server pool ({ pool }), a tier, or ≤ maxTier shop-eligible items.
    * `player` selects the receiver's fixed-group equipment stock (a whole-room utility like 战术决策 falls back to the
    * first group) — a支援 granted to one seat must respect the stock of the group that seat belongs to.
-   */
+   * `also` (pool_equip_kathe: 突变细胞) joins the draw even though it is shopExcluded. The shop item slot does not
+   * read it. `pick` still drops ids that `canGain` refuses, so an empty shop item stays out and an uncapped `also`
+   * id can still be drawn. */
   rollItemId({ pool = null, tier = null, maxTier = 6, shopLevel = 6, player = null } = {}) {
     const stock = player ? this.itemPoolFor(player) : this.itemPool;
     const pools = this.gd.choices.pools && typeof this.gd.choices.pools === 'object' ? this.gd.choices.pools : {};
     const p = typeof pool === 'string' && Object.hasOwn(pools, pool) ? pools[pool] : null;
     const rng = this.rngMeta;
     const tierList = (lo, hi) => { const out = []; for (let t = lo; t <= hi; t++) for (const id of this.gd.shopItemsByTier[t] || []) out.push(id); return out; };
+    const also = p && Array.isArray(p.also) ? p.also.filter((id) => typeof id === 'string' && this.gd.item(id)) : [];
+    const withAlso = (list) => {
+      const out = list.slice();
+      for (const id of also) if (!out.includes(id)) out.push(id);
+      return out;
+    };
     if (p && p.kind === 'equip') {
       if (Array.isArray(p.weighted) && p.weighted.length) {
         const pairs = p.weighted.filter((x) => Array.isArray(x) && this.gd.item(x[0]) && stock.canGain(x[0]));
+        for (const id of also) if (!pairs.some((x) => x[0] === id)) pairs.push([id, 1]);
         return stock.pick(rng, pairs.map(x => x[0]), new Map(pairs));
       }
       if (Array.isArray(p.items) && p.items.length) {
         const items = p.items.filter((id) => this.gd.item(id));
-        return stock.pick(rng, items);
+        return stock.pick(rng, withAlso(items));
       }
       let list;
       if (Array.isArray(p.tiers) && p.tiers.length) list = p.tiers.flatMap((t) => this.gd.shopItemsByTier[t] || []);
       else list = tierList(1, p.maxTier === 'shopLevel' ? Math.max(1, Math.min(6, shopLevel)) : 6);
-      return stock.pick(rng, list);
+      return stock.pick(rng, withAlso(list));
     }
     const list = Number.isInteger(tier) ? tierList(tier, tier) : tierList(1, Math.max(1, Math.min(6, maxTier)));
     return stock.pick(rng, list);
