@@ -35,6 +35,7 @@ import { errorCount, currentBattle, diagnosticsText } from '../diag.js';
 import { copyText } from './clipboard.js';
 import { catalog, loadCatalog, cosmeticPlugins, installedCount, personal, personalApplied, personalSet, pluginName, setPersonalPlugin } from '../content.js';
 import { setUiPlugin, uiPluginEntries, uiPlugins } from './uiPlugins.js';
+import { syncState, setSyncEnabled, uploadNow, downloadNow, deleteAccount } from '../profile.js';
 import { UI_LIMITS } from '../../../shared/plugins/ui.js';
 import { toast, describeError } from './toasts.js';
 import { pluginMicro } from './pluginTag.js';
@@ -329,6 +330,56 @@ function UiPluginSection() {
 }
 
 /**
+ * 账号同步 (public/js/profile.js): the switch and the explicit directions. The account is the nickname this page plays
+ * with (the title screen's 博士代号); there is no password, so the hint says plainly what anyone knowing the nickname can
+ * do. 对局统计 travel with the settings and are merged per match record on both sides, so two devices add to one history.
+ * The section is always shown: it is the only way to switch the sync on, and a server that turned the routes off
+ * (SP_PROFILES=off) answers with an error instead of pretending.
+ */
+function AccountSection() {
+  const st = useStore((s) => s, Object.is, syncState);
+  const name = useStore((s) => s.me.name);
+  const [confirming, setConfirming] = useState(false);
+  const account = name || st.name || '';
+  const on = !!st.enabled;
+  const flip = (v) => {
+    const r = setSyncEnabled(v);
+    if (!r.ok) toast(t('先在标题画面输入博士代号，再开启同步'), 'warn');
+  };
+  const note = !on ? t('未开启')
+    : st.status === 'error' ? t('同步失败：{error}', { error: st.error || '' })
+      : st.status === 'syncing' ? t('同步中…')
+        : st.at ? t('上次同步：{time}', { time: new Date(st.at).toLocaleString() })
+          : t('已同步');
+  const remove = async () => {
+    const r = await deleteAccount();
+    setConfirming(false);
+    if (r.ok) toast(t('已删除服务器上的设置'), 'success');
+    else toast(t('同步失败：{error}', { error: r.error || '' }), 'error');
+  };
+  return html`<section class="set-sync" aria-labelledby="set-sync-title" data-testid="account-sync">
+    <div class="set-keys__head">
+      <span class="set-row__label" id="set-sync-title">${t('账号同步')}<${MicroLabel}>ACCOUNT SYNC<//></span>
+      <span class="set-sync__account" title=${t('账号同步')}>${account}</span>
+    </div>
+    <p class="set-hint">${t('用博士代号当账号，代号相同就是同一份设置，不设密码：知道代号的人都能读到和修改这份设置。')}</p>
+    <${Toggle} label=${t('开启同步')} micro="SYNC" value=${on} onChange=${flip} />
+    <p class=${cx('set-keys__note', st.status === 'error' && 'is-warn')} role="status" aria-live="polite" data-testid="account-sync-status">${note}</p>
+    ${on ? html`<div class="set-sync__actions">
+      <${Button} variant="secondary" size="sm" icon="upload" data-testid="account-upload" onClick=${() => { void uploadNow(); }}>${t('上传本机设置')}<//>
+      <${Button} variant="secondary" size="sm" icon="download" data-testid="account-download" onClick=${() => { void downloadNow(); }}>${t('下载账号设置')}<//>
+      <${Button} variant="ghost" size="sm" icon="close" onClick=${() => setConfirming(true)}>${t('删除服务器上的设置')}<//>
+    </div>` : null}
+    ${confirming ? html`<p class="set-hint is-warn">${t('删除后，这个代号在服务器上的设置会被移除；本机设置保留。')}</p>
+      <div class="set-sync__actions">
+        <${Button} variant="secondary" size="sm" onClick=${remove}>${t('确认删除')}<//>
+        <${Button} variant="ghost" size="sm" onClick=${() => setConfirming(false)}>${t('取消')}<//>
+      </div>` : null}
+    <p class="set-hint">${t('对局统计也一起同步：服务器按对局编号合并两边的记录，不会互相覆盖。')}</p>
+  </section>`;
+}
+
+/**
  * Settings modal.
  * @param {{ open: boolean, onClose: Function }} props
  */
@@ -408,6 +459,7 @@ export function SettingsModal({ open, onClose }) {
       <${HotkeySection} keys=${s.keys} touchUi=${touchUi} />
       <${CosmeticSection} />
       <${UiPluginSection} />
+      <${AccountSection} />
       <${DiagSection} />
       <p class="set-hint">${touchUi ? t('触屏操作：点击单位选中（撤退 / 出售）· 长按单位或卡牌查看详情 · 拖动部署后滑动选择朝向') : t('右键查看详情')}</p>
     </div>

@@ -38,6 +38,7 @@ import { scriptOf } from '../../../shared/i18nPacks.js';
 import { GIcon } from '../ui/gameComponents.js';
 import { SettingsModal } from '../ui/settings.js';
 import { installedCount } from '../content.js';
+import { accountEntered } from '../profile.js';
 import { sanitizeName, isValidName } from '../ui/playerName.js';
 
 export { stripLoneSurrogates, sanitizeName, isValidName } from '../ui/playerName.js';
@@ -54,6 +55,8 @@ export function enterSession(rawName) {
   identity.setEntered(true);
   store.set((s) => ({ me: { ...s.me, name }, session: { ...s.session, entered: true } }));
   net.setName(name);
+  // 账号同步 (public/js/profile.js): this nickname is the account — entering a different one reconciles with it
+  accountEntered(name);
   return true;
 }
 

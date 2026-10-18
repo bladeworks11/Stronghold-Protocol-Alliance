@@ -57,6 +57,7 @@ import { StatsHost } from './screens/stats.js';
 import { installRehearsal } from './battle/rehearsal.js';
 import { recordResult, installStatsRecorder } from './ui/stats.js';
 import { installLoadoutSync, installOwnershipSync, installDiySync } from './ui/loadoutSync.js';
+import { installProfileSync } from './profile.js';
 import { startBuildGuard } from './ui/buildGuard.js';
 import { initLang, useLang, tickerText } from './ui/lang.js';
 import { t, N_, translateWire } from '../../shared/i18n.js';
@@ -396,6 +397,10 @@ async function boot() {
   installLoadoutSync({ net });
   installOwnershipSync({ net });
   installDiySync({ net });
+  // 账号同步 (public/js/profile.js): the server keeps this player's preferences under their nickname — 设置 / 编队 / 自选 /
+  // 统计 — so another device picks them up. Every savePref goes up (debounced); a page load with sync on reconciles with
+  // the account (this browser's edits win when it has any, otherwise a change made elsewhere is applied and reloads once).
+  installProfileSync({ notify: toast, reload: () => location.reload() });
   // the room's cosmetic plugins and the player's own over the art manifest (content.js; nothing is fetched without them)
   installContent({ toast });
   // a room with gameplay plugins: its content set downloaded, checked and shown (content.js — DESIGN §32.6)

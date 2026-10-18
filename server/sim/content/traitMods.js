@@ -114,11 +114,11 @@ const MODE_SPECIFIC = [/在集成战略中/];
  *
  * 丰川祥子 char_4182_oblvns (a 自选 pick; put back into the pool by tools/build-data.mjs DIY_INCLUDED_COLLABS):
  *   her module LOR-Y carries its `attack_speed` 12 straight on `trait.bb`, so `crowdInRange` reads
- *   「攻击范围内存在2名及以上敌人时」 and would install the stat on HERSELF. The official line is
- *   「攻击范围内干员攻击速度+12」 — her T2 毋畏遗忘's ally aura, i.e. an attack-speed buff for the operators in her range,
- *   not for her. The engine rule would therefore buff the wrong unit. 仇白's LOR-Y (the same sentence) escapes this by
- *   carrying the number on a NAMED talent, which this file does not read.
- *   Her kit (ops/op-oblvns.js, not written yet) owns the ally aura; refused as 'kit' until then.
+ *   「攻击范围内存在2名及以上敌人时」 and would install the stat on HERSELF. That line IS her own attack speed — the
+ *   module's 特性追加 「初始攻击范围内存在2名及以上敌人时攻击速度+12」 (PRTS 模组 无言的约定; the T2 ally aura is a
+ *   different sentence, 「攻击范围内干员攻击速度+16」) — and her kit (ops/op-oblvns.js) installs it there instead,
+ *   counting by collision and ignoring selectability as the module's 备注 says. Applying it here as well would
+ *   double it, so the line stays refused as 'kit'.
  */
 const KIT_OWNED_CHARS = new Set(['char_4182_oblvns']);
 

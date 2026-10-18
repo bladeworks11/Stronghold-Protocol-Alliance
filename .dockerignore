@@ -14,6 +14,8 @@ plugins/*
 !plugins/README.md
 !plugins/AGENTS.md
 !plugins/_template/
+# the accounts of this host (server/profiles.js): a volume at runtime, never in the image
+profiles/
 handoff
 pv
 3，9，11回合情况

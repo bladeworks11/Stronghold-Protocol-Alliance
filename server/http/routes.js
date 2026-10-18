@@ -4,6 +4,8 @@
 //   * a URL longer than 4096 characters → 414; one that does not parse → 400;
 //   * /studio and /studio/… → the plugin studio (server/studio/index.js: for this machine and the local network only — any
 //     other client gets the 404 page; its API also takes POST / PUT / DELETE), when the server has one;
+//   * /api/profile/… → the account sync (server/profiles.js: one nickname = one account, no password; GET / PUT / DELETE),
+//     when the server has it (SP_PROFILES=off: none);
 //   * any method but GET / HEAD → 405 with `Allow: GET, HEAD`;
 //   * GET /healthz → JSON status (protocol `version`, release `app`, uptime, the served `build`, the vanilla content
 //     hash `content.vanilla`, the modded content sets in use `content.sets` and — only when there are some — how many
@@ -74,12 +76,13 @@ const wantsTraffic = (query) => /(?:^|&)traffic(?:=(?:1|true|yes))?(?:&|$)/i.tes
  *             rawPath: string, query: string) => Promise<void>,
  *           health: Parameters<typeof healthReport>[0], log: object, trustProxy?: 'auto' | boolean,
  *           csp?: string | null,
- *           studio?: { handles: (rawPath: string) => boolean, handle: (req: any, res: any, rawPath: string, query: string) => Promise<void> } | null }} deps
+ *           studio?: { handles: (rawPath: string) => boolean, handle: (req: any, res: any, rawPath: string, query: string) => Promise<void> } | null,
+ *           profiles?: { handles: (rawPath: string) => boolean, handle: (req: any, res: any, rawPath: string, query: string) => Promise<void> } | null }} deps
  *   trustProxy: whose forwarding headers name the client (net.js clientAddress; the server's TRUST_PROXY); studio: the
- *   plugin studio (server/studio/index.js), or none
+ *   plugin studio (server/studio/index.js), or none; profiles: the account sync (server/profiles.js), or none
  * @returns {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void}
  */
-export function createRequestHandler({ serveStatic, health, log, trustProxy = 'auto', studio = null, csp = null, trustedRuntime = null }) {
+export function createRequestHandler({ serveStatic, health, log, trustProxy = 'auto', studio = null, csp = null, trustedRuntime = null, profiles = null }) {
   async function handleRequest(req, res) {
     const url = req.url || '/';
     if (url.length > MAX_URL_LENGTH) { sendError(req, res, 414, '请求地址过长 · URI too long'); return; }
@@ -87,6 +90,8 @@ export function createRequestHandler({ serveStatic, health, log, trustProxy = 'a
     if (!parts) { sendError(req, res, 400, '请求地址无效 · Bad request'); return; }
     if (trustedRuntime && parts.rawPath.startsWith('/x/') && await trustedRuntime.route(req,res,parts.rawPath)) return;
     if (studio && studio.handles(parts.rawPath)) { await studio.handle(req, res, parts.rawPath, parts.query); return; }
+    // the account sync (server/profiles.js): GET / PUT / DELETE, before the GET-only rule below
+    if (profiles && profiles.handles(parts.rawPath)) { await profiles.handle(req, res, parts.rawPath, parts.query); return; }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.setHeader('Allow', 'GET, HEAD');
       sendError(req, res, 405, '不支持的请求方法 · Method not allowed');

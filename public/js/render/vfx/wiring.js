@@ -68,6 +68,8 @@ export const TIMER_HIT_MAX = 1.5;
 const CLAIM_LEAD = 0.2;
 /** Battle seconds a chain's lightning line shows between two of its targets (its prefab loops) [ASSUMED]. */
 export const CHAIN_LINE_S = 0.2;
+/** 本机自用: how high above the ground 丰川祥子's 音符 fly (its official trail is placed there, render/vfx/wiring.js noteFx). */
+export const NOTE_Z = 0.45;
 /** Battle seconds after its shot's hit a chain stays open for the sim's bounces (it bounces in the hit's tick). */
 const CHAIN_WINDOW = 0.5;
 /** Tiles from a blocker's centre a blocked enemy stands within (the sim's block radius: ground 0.7071, air 0.8944). */
@@ -213,6 +215,10 @@ export class FxWiring {
     this.keyCache = new Map();    // unit id → index unit key | null
     this.attackN = new Map();     // unit id → attacks so far (onlyOnce / hookEffectAfterFirstAttack rows)
     this.castFrame = new Map();   // unit id → the frame of its last attack (several targets of one attack cast once)
+    // 本机自用: 丰川祥子's 音符 flights (kitFx): note id → its official trail handle
+    this.notes = new Map();
+    // 本机自用: her skills' official loops (kitFx): `<unit id>|<tag>` → handle (a buff aura, S3's widened range)
+    this.kitFxLoops = new Map();
     this.skills = new SkillFx(this);
     this.talents = new TalentFx(this);
     this.funnels = new FunnelFx(this);
@@ -1307,11 +1313,89 @@ export class FxWiring {
    * (the procedural fx is skipped).
    */
   simFx(kind, x, y, extra) {
+    // 本机自用: 丰川祥子's fx — the kit-managed note flights and her skills' official effects (kitFx). Not gated on the
+    // index: her prefabs come from the local extraction as plain fx keys, no unit entry needed.
+    if (this.kitFx(kind, x, y, extra)) return true;
     if (!this.idx) return false;
     const t = this.talents.fx(kind, extra);
     // the floating units stand for the kit's 'drone' / 'drones' / 'droneLock' / 'overload' (render/vfx/funnelfx.js)
     const f = this.funnels.simFx(kind, x, y, extra);
     return this.skills.simFx(kind, x, y, extra) || t || f;
+  }
+
+  /**
+   * 本机自用: 丰川祥子's fx (server/sim/content/kits/ops/op-oblvns.js). Her notes and skills are kit-managed — no official
+   * ability carries them — so the kit NAMES the official prefab each event stands for (exported from the local client by
+   * `tools/local-extract/export-oblvns-fx.py`):
+   *   `oblvnsNote`      one note's flight: its trail prefab is spawned on the first event and moved with the next ones
+   *   `oblvnsNoteHit`   the note landing: its impact prefab, a one-shot at the target
+   *   `oblvnsNoteEnd`   the note gone: the flight's trail stops (it fades out)
+   *   `oblvnsSkill`     a skill's `start` (one-shot), `loop` (a buff / the widened range, one per `tag` slot) or `stop`
+   * False when the named prefab was not extracted or 官方特效 is off: render/fx draws the note with the procedural art.
+   */
+  kitFx(kind, x, y, extra) {
+    const e = extra && typeof extra === 'object' ? extra : null;
+    if (!e || !this.ofx.active) return false;
+    if (kind === 'oblvnsSkill') {
+      const tag = typeof e.tag === 'string' && e.tag ? e.tag : null;
+      if (!tag) return false;
+      const slot = `${e.id}|${tag}`;
+      if (e.mode === 'stop') {
+        const h = this.kitFxLoops.get(slot);
+        if (!h) return false;
+        this.kitFxLoops.delete(slot);
+        h.stop();
+        return true;
+      }
+      const key = lc(e.key);
+      if (!key || !this.ofx.lib.has(key)) return false;
+      const place = this._spotPlace(x, y);
+      if (e.mode !== 'loop') {
+        this.ofx.spawn(key, place, {});
+        return true;
+      }
+      const old = this.kitFxLoops.get(slot);
+      if (old) { old.stop(); this.kitFxLoops.delete(slot); }   // one live loop per slot (a timbre switch swaps it)
+      const h = this.ofx.spawn(key, place, { loop: true, important: true });
+      if (!h) return false;
+      this.kitFxLoops.set(slot, h);
+      return true;
+    }
+    if (kind === 'oblvnsNoteEnd') {
+      const n = this.notes.get(e.note);
+      if (!n) return false;
+      this.notes.delete(e.note);
+      n.h.stop();     // the note is gone: the trail stops emitting and fades out
+      return true;
+    }
+    if (kind === 'oblvnsNoteHit') {
+      const key = lc(e.hit);
+      if (!key || !this.ofx.lib.has(key)) return false;
+      this.ofx.spawn(key, this._notePlace(x, y), {});
+      return true;
+    }
+    if (kind !== 'oblvnsNote' || e.note == null) return false;
+    const key = lc(e.trail);
+    if (!key || !this.ofx.lib.has(key)) return false;
+    const place = this._notePlace(x, y);
+    const live = this.notes.get(e.note);
+    if (live) { live.h.place(place); return true; }
+    const h = this.ofx.spawn(key, place, { loop: true });   // a looping trail: one per flight, moved along it
+    if (!h) return false;
+    this.notes.set(e.note, { h });
+    return true;
+  }
+
+  /** Where a note flies: (x, y) NOTE_Z tiles up, in the effect frame (whose z points down: a board height h is −h). */
+  _notePlace(x, y) {
+    const g = Number(this.ofx.ctx?.heightAt?.(Math.round(y), Math.round(x))) || 0;
+    return { pos: [x, y, -(g + NOTE_Z)], groundZ: -g };
+  }
+
+  /** A tile's own spot, for a skill effect that sits on the caster (its prefab nodes give the height). */
+  _spotPlace(x, y) {
+    const g = Number(this.ofx.ctx?.heightAt?.(Math.round(y), Math.round(x))) || 0;
+    return { pos: [x, y, -g], groundZ: -g };
   }
 
   /** b.ev 'die': the unit's own death effect or the generic one. */
@@ -1350,6 +1434,10 @@ export class FxWiring {
   /** Battle reset. */
   clear() {
     this.flights.clear();
+    for (const n of this.notes.values()) n.h.kill();   // 本机自用: the notes' official trails
+    this.notes.clear();
+    for (const h of this.kitFxLoops.values()) h.kill();   // and her skills' loops
+    this.kitFxLoops.clear();
     this.loops.clear();
     this.melee.clear();
     this.arrived.clear();

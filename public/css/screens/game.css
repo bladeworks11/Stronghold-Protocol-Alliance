@@ -708,6 +708,11 @@
 .set-diag__text:focus { border-color: var(--mint-700); }
 /* touch: 16 px, below which iOS zooms into the focused box (as 干员调配's 导出 box and ui/clipboard.js) */
 .sp-coarse .set-diag__text { font-size: 16px; }
+/* 账号同步 (ui/settings.js AccountSection, public/js/profile.js): the switch, its status line and the three explicit
+   directions — laid out like 快捷键 / 问题反馈 above, with the account (the nickname) at the head's right */
+.set-sync { display: flex; flex-direction: column; gap: .08rem; padding-top: .1rem; border-top: 1px solid var(--line); }
+.set-sync__account { min-width: 0; font-family: var(--font-num); font-size: calc(.14 * var(--t)); color: var(--mint-400); overflow-wrap: anywhere; -webkit-user-select: all; user-select: all; }
+.set-sync__actions { display: flex; flex-wrap: wrap; gap: .08rem; }
 @media (max-width: 767px) { .set-keys__list { grid-template-columns: minmax(0, 1fr); } }
 @media (max-height: 600px) and (pointer: coarse), (max-height: 600px) and (any-pointer: coarse) {
   .set-key { height: max(.38rem, 30px); }

@@ -21,9 +21,14 @@
 //                      its hash segment (/assets/~<hash>/…, immutable when the hash matches); the files stay unchanged
 //   http/buildTag.js   the build tag of the served browser runtime (/healthz `build`, public/js/ui/buildGuard.js)
 //   http/routes.js     the request listener: security headers, 414 / 400, the plugin studio (/studio/, studio/index.js —
-//                      this machine and the local network only), 405, GET /healthz → JSON status, else static
+//                      this machine and the local network only), the account sync (/api/profile, profiles.js), 405,
+//                      GET /healthz → JSON status, else static
 //   http/traffic.js    the traffic counters: bytes sent per category (assets / audio / code / data) and on the
 //                      WebSocket, since the start (GET /healthz?traffic=1)
+//   profiles.js        the account sync (账号同步): one nickname = one account, no password; /api/profile/<name> over the
+//                      preferences the browser keeps in `sp.pref.*`, stored in profiles/<hash>.json (shared/profiles.js)
+//   statsRecord.js     the settlement of every match becomes one record in each player's account (对局统计), with the
+//                      record id shared/statsRecord.js gives the browser too — so a finished match needs no upload
 //   http/common.js     what every answer shares: security headers, URL split, error page, JSON replies, bare 400
 //   http/boot.js       a pending update package first (update.js: old files deleted, the install verified against
 //                      MANIFEST.json), banner (Local / LAN / tunnel URLs), port-in-use hint, graceful shutdown on SIGINT /
@@ -38,7 +43,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import { getData, loadData } from './data.js';
-import { ROOT, listenAddress, bindCandidates, serveDirs, makeLogger, parseTrustProxy, assetIndexOptionsFrom } from './http/config.js';
+import { ROOT, listenAddress, bindCandidates, serveDirs, makeLogger, parseTrustProxy, assetIndexOptionsFrom, profilesOptionsFrom } from './http/config.js';
 import { WS_MAX_PAYLOAD, createSessionStack, attachWebSocket } from './http/websocket.js';
 import { siteCsp } from './http/csp.js';
 import { DATA_SHIM_JS, createStaticHandler } from './http/static.js';
@@ -52,6 +57,8 @@ import { createMatchHosts } from './match/host/index.js';
 import { createTrustedRuntime } from './plugins/trustedRuntime.js';
 import { trustedHostAllowed } from './plugins/trusted.js';
 import { createStudio } from './studio/index.js';
+import { createProfiles } from './profiles.js';
+import { createSettlementSink } from './statsRecord.js';
 import { MIME, COMPRESSIBLE, acceptsGzip, pickEncoding, parseRange } from './http/files.js';
 import { BUILD_INPUTS, computeBuildTag, buildTag, resetBuildTag } from './http/buildTag.js';
 import { createRequestHandler } from './http/routes.js';
@@ -78,11 +85,14 @@ export {
  *   maxConnectionsPerAddr?: number, maxRoomsPerAddr?: number, maxMatchesPerAddr?: number, resyncMinGapMs?: number,
  *   heavyPerSec?: number, heavyBurst?: number, trustProxy?: 'auto' | boolean, soloReconnectWindowMs?: number,
  *   assetIndex?: boolean | { cacheFile?: string | null, delayMs?: number }, studio?: boolean,
+ *   profiles?: boolean | { dir?: string },
  *   matchHost?: object,
  * }} [opts]
  *   assetIndex: the content-hash index (default on; false or SP_ASSET_INDEX=0: off — config.js assetIndexOptionsFrom);
  *   studio: the plugin studio at /studio/ (default on for this machine and the local network — SP_STUDIO=local|off;
  *   false: none);
+ *   profiles: the account sync at /api/profile (default on in `profiles/`; false or SP_PROFILES=off: none — config.js
+ *   profilesOptionsFrom);
  *   matchHost: options of the match hosts (server/match/host/index.js — watchdogMs, matchOptions …; tests)
  * @returns {Promise<{ port: number, host: string, url: string, server: http.Server, wss: import('ws').WebSocketServer,
  *                     lobby: import('./lobby.js').Lobby, network: import('./net.js').Network,
@@ -91,6 +101,7 @@ export {
  *                     contents: ReturnType<typeof createContentSets>, hosts: ReturnType<typeof createMatchHosts>,
  *                     traffic: ReturnType<typeof createTrafficCounter>, assetIndex: ReturnType<typeof createAssetIndex> | null,
  *                     views: ReturnType<typeof createManifestViews> | null, studio: ReturnType<typeof createStudio> | null,
+ *                     profiles: ReturnType<typeof createProfiles> | null,
  *                     close: () => Promise<void> }>}
  */
 export async function startServer(opts = {}) {
@@ -130,6 +141,13 @@ export async function startServer(opts = {}) {
   // the plugin studio (DESIGN §32.9): its page and API for this machine and the local network; it watches plugins/ only
   // once it is used (hot reload), and rooms whose host is the author or alone follow a plugin's changes by themselves
   const studio = opts.studio === false ? null : createStudio({ publicDir, pluginsDir, dataDir, registry: packs, lobby, sessions: registry, log, fetch: opts.fetch });
+  // the account sync (账号同步: one nickname = one account, no password): its routes under /api/profile, its files in
+  // profiles/ (SP_PROFILES=off: none at all — shared/profiles.js is the contract, public/js/profile.js the browser side)
+  const profileOptions = profilesOptionsFrom(opts);
+  const profiles = profileOptions ? createProfiles({ ...profileOptions, log, trustProxy: network.opts.trustProxy }) : null;
+  // every settlement becomes one record per player in that player's account (server/statsRecord.js): the browser uploads
+  // only what the server cannot know (a match left early), so a finished match costs the server no traffic at all
+  if (profiles) lobby.statsSink = createSettlementSink({ profiles, log });
   const trustedRuntime = await createTrustedRuntime({registry:packs,log});
   lobby.trustedRuntime = trustedRuntime;
   const startedAt = Date.now();
@@ -138,7 +156,7 @@ export async function startServer(opts = {}) {
   buildTag();
 
   const traffic = createTrafficCounter();
-  const server = http.createServer(createRequestHandler({ serveStatic, csp: process.env.SP_CSP === 'off' ? null : siteCsp(publicDir), health: { startedAt, network, registry, lobby, content, traffic, assetIndex, views, trusted:trustedRuntime?.health }, log, trustProxy: network.opts.trustProxy, studio, trustedRuntime }));
+  const server = http.createServer(createRequestHandler({ serveStatic, csp: process.env.SP_CSP === 'off' ? null : siteCsp(publicDir), health: { startedAt, network, registry, lobby, content, traffic, assetIndex, views, trusted:trustedRuntime?.health }, log, trustProxy: network.opts.trustProxy, studio, trustedRuntime, profiles }));
   server.on('clientError', answerClientError);
   const wss = attachWebSocket(server, { network, log, traffic });
 
@@ -213,7 +231,7 @@ export async function startServer(opts = {}) {
     return closing;
   }
 
-  return { port: actualPort, host: boundHost, url, server, wss, lobby, network, registry, packs, content, visual, contents, hosts, traffic, assetIndex, views, studio, close };
+  return { port: actualPort, host: boundHost, url, server, wss, lobby, network, registry, packs, content, visual, contents, hosts, traffic, assetIndex, views, studio, profiles, close };
 }
 
 // `node server/index.js` / npm start: listen, print the banner, stop on SIGINT / SIGTERM (http/boot.js).

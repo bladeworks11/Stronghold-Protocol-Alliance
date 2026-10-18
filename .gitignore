@@ -50,6 +50,10 @@ test/e2e/out/
 logs/
 *.log
 
+# --- account sync (server/profiles.js): the accounts this server keeps, one file per nickname ----------
+# (server-side player settings, no password: a per-machine file, never committed nor shipped in a package)
+/profiles/
+
 # --- per-machine config (scripts/install-service-windows.ps1) ------------------------------------
 scripts/service.env.cmd
 .env

@@ -122,8 +122,12 @@ npm start          # 启动服务器：http://localhost:3000
 | `SP_NO_BROWSER` | 空 | 设为 `1` 时启动脚本不自动打开浏览器 |
 | `SP_BOT_EMOTES` | 空 | AI 队友的对局表情回应（战斗、整备、合成、联防、收礼时即刻的 `m.emote` 广播）；设为 `0` 时整体关闭 |
 | `SP_ASSET_INDEX` | 空 | 素材地址带内容哈希、浏览器长期缓存（0.2.6 起默认开启，哈希存在 `.cache/asset-hashes.json`）；设为 `0` 时关闭，素材清单原样下发 |
+| `SP_PROFILES` | 空 | 账号同步（设置 → 账号同步：按博士代号把设置存在服务器的 `profiles/`）；设为 `0` 时关闭，`/api/profile` 不再存在 |
+| `SP_PROFILES_DIR` | `profiles` | 账号同步用的文件夹（每个代号一个 JSON 文件，备份它就备份了所有人的设置） |
 
 设置方式：macOS / Linux `PORT=8080 npm start`；PowerShell `$env:PORT=8080; npm start`；cmd `set "PORT=8080" && npm start`。健康检查：`GET /healthz`。
+
+**账号同步**：设置 → 账号同步 可以把设置（画面、声音、语言、快捷键、编队、自选、表情、大厅默认值和对局统计）按博士代号存在服务器上，换一台设备用同一个代号就接上。它只按代号匹配、不设密码（知道代号的人都能读写这份设置），设置存在服务器的 `profiles/`，备份与关闭方法见[部署指南](docs/DEPLOY.md)第 0 节。
 
 ### 和朋友一起玩（局域网）
 

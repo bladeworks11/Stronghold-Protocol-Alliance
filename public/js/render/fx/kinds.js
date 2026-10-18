@@ -21,6 +21,19 @@ export const FX_KINDS = Object.freeze({
   dance: { a: 'blast', c: 0xffd0d0 },
   // 本机自用: 丰川祥子 的 Fever 开场（ops/op-oblvns.js；`ba.fever` 累计至 450 点时的 20 秒窗口）— a stage-wide pulse.
   fever: { a: 'zone', c: 0xd06ad0, dur: 2, r: 2 },
+  // 本机自用: 丰川祥子 的音符（ops/op-oblvns.js）— one of her kit-managed notes, sent every 0.12 s with its own point, the
+  // previous one and its heading (`tone`: 'phys' 钢琴 / 'arts' 风琴). Its own archetype draws the official look: the
+  // textures the local client extraction gave (public/assets/local/oblvns/, see simfx.js NOTE_ART) — her 星芒 as the
+  // head and the 谱线 ribbon along the step — with the procedural flare/streak standing in until they load.
+  oblvnsNote: { a: 'note', c: 0xd76ad0, pt: true },
+  // 本机自用: the same notes' impact and end. The OFFICIAL layer plays them (render/vfx/wiring.js noteFx: her extraction's
+  // `oblvns_*_hit` prefab, and stopping the flight's trail); the procedural path has nothing to draw for either — the
+  // note's own art is the flight, whose damage number marks the impact.
+  oblvnsNoteHit: { a: 'none', c: 0xd76ad0 },
+  oblvnsNoteEnd: { a: 'none', c: 0xd76ad0 },
+  // 本机自用: her skills' official effects (their start, the timbre aura, S3's widened range): the same deal — the official
+  // layer spawns/stops the named prefab (render/vfx/wiring.js kitFx) and the procedural path has nothing to draw.
+  oblvnsSkill: { a: 'none', c: 0xd76ad0 },
   // 赤刃明霄陈 S3 赤霄·天喟 的龙剑气: a travelling blade, drawn from the sim's per-interval `chen3Wave` events (its own
   // position + the previous point + direction); `pt` because it is not at the caster (it roams and passes by her tile)
   chen3Wave: { a: 'qi', c: 0xdfe8ff, pt: true },

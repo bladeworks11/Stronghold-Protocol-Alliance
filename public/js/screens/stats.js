@@ -10,8 +10,10 @@
 //   对局记录  – every stored match, newest first. A settled row re-views that match's settlement screen (the record is
 //               inverted into an m.result payload for <ResultView/>); a match given up early is marked 中途退出 and,
 //               when it did not count, 不计入统计
-// Everything is 本机数据 (localStorage, `sp.pref.stats`) and the page says so, teammates' names included. 导出 / 导入 (a
-// JSON file, merged by record id on the way in) moves it between devices; 清空 resets it after a confirm dialog.
+// Everything is this browser's own data (localStorage, `sp.pref.stats`) and the page says so, teammates' names included;
+// with 账号同步 on, each settled match is also written into the player's account by the server (server/statsRecord.js,
+// same record id) and a 清空 only empties this device — the account's copy merges back on the next sync (the confirm
+// dialog says so). 导出 / 导入 (a JSON file, merged by record id on the way in) still moves it between devices by hand.
 // The host renders nothing until opened and the game data files the replay needs load only then (the lobby alone never
 // downloads them): the statistics tabs read config / bands / bonds / assets only.
 
@@ -33,6 +35,7 @@ import {
   recordToResult, MAX_RECORDS, FULL_KEEP, IMPORT_MAX_CHARS,
   trophyMedalOf, strategyBadgeIds, bondMemberChess, highestBondRecord,
 } from '../ui/stats.js';
+import { loadSync } from '../profile.js';
 import { t, N_ } from '../../../shared/i18n.js';
 
 const cx = (...p) => p.flat().filter(Boolean).join(' ');
@@ -149,7 +152,7 @@ function Overview({ agg, gd, nickname, records }) {
       <div class="st-mode-summary">
         <div class="st-profile">
           <b class="st-profile__name">Dr. ${nickname || t('未知')}</b>
-          <div class="st-profile__trophies" title=${t('累计本机保留战绩中获得的奖杯')}>
+          <div class="st-profile__trophies" title=${t('累计保留战绩中获得的奖杯')}>
             <${Img} src=${uiUrl(gd.m, `medalIcon/${trophyMedalOf(agg.trophies, gd.config?.trophies?.medals)?.iconId || ''}`)}
               class="st-profile__medal" fallback=${html`<${Icon} name="crown" />`} />
             <div><span>${t('获得奖杯')}</span><b class="num">${fmtNum(agg.trophies)}</b></div>
@@ -539,14 +542,17 @@ function StatsScreen({ tab }) {
     }
   };
   const doClear = async () => {
+    const synced = loadSync().enabled;
     const ok = await confirmDialog({
       title: t('清空统计数据'), micro: 'CLEAR STATISTICS', danger: true, okText: t('清空'),
-      text: t('将删除本机保存的 {n} 条对局记录，无法恢复。', { n: stats.records.length }),
+      text: synced
+        ? t('将删除本机保存的 {n} 条对局记录。账号同步已开启：服务器上的那份不会被删除，下次同步会再合并回来——要一起删除请用 设置 → 账号同步 →「删除服务器上的设置」。', { n: stats.records.length })
+        : t('将删除本机保存的 {n} 条对局记录，无法恢复。', { n: stats.records.length }),
     });
     if (!ok) return;
     if (!saveStats(emptyStats())) { try { globalThis.localStorage?.removeItem('sp.pref.stats'); } catch { /* ignore */ } }
     reload();
-    toast(t('已清空本机统计数据'), 'success');
+    toast(synced ? t('已清空本机统计数据（账号同步开启时，服务器上的记录仍在）') : t('已清空本机统计数据'), 'success');
   };
 
   if (replay) return html`<div class="st st--replay" ref=${boxRef} tabindex="-1" role="dialog" aria-modal="true" aria-label=${t('统计数据')}>
@@ -575,7 +581,7 @@ function StatsScreen({ tab }) {
         <${Button} variant="secondary" size="sm" data-testid="stats-clear" disabled=${empty || stats.newer} onClick=${doClear} title=${t('清空本机的统计数据')}>${t('清空')}<//>
       </div>
     </header>
-    <p class="st-note"><${Icon} name="info" />${t('本机数据：只保存在这个浏览器里，不会上传到服务器；同盟对局里队友的代号也会存在本机（导出文件里也有）。')}</p>
+    <p class="st-note"><${Icon} name="info" />${t('本机保存：开启账号同步后，每局结算由服务器按代号存一份（换设备能接上），本机也留一份；关闭同步则只在本机。同盟对局里队友的代号也在记录中（导出文件里同样有）。')}</p>
     ${stats.damaged ? html`<p class="st-note is-warn"><${Icon} name="warn" />${t('本机保存的统计数据无法读取，已另存为备份，从现在起重新记录。')}</p>` : null}
     ${stats.dropped ? html`<p class="st-note is-warn"><${Icon} name="warn" />${t('有 {n} 条记录已损坏，已忽略。', { n: stats.dropped })}</p>` : null}
     <div class="ui-slot" data-ui-slot="stats.tab" aria-label=${t('界面插件')} dangerouslySetInnerHTML=${{ __html: '' }}></div>

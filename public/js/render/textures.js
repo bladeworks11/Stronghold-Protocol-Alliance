@@ -869,6 +869,15 @@ const FX_DRAW = {
     g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = g; c.fillRect(x + 1, y, w - 2, h);
   }],
+  // 本机自用: 丰川祥子 的音符贴图 (ops/op-oblvns.js), a reserved 2×2 block at (64,192) and 64–320 px tall — left blank here.
+  // render/fx/simfx.js blits the official art the local extraction gave (public/assets/local/oblvns/) into these frames
+  // once at load and calls base.update(): the note must share the particle atlas' ONE base texture, because a Pixi
+  // ParticleContainer renders every sprite through children[0]'s base texture (ParticleRenderer sets a single
+  // `uSampler`) — a note drawn from its own texture would sample the atlas instead and come out as garbage.
+  note_star: [64, 192, 128, 128, () => {}],
+  note_ribbon: [192, 192, 128, 128, () => {}],
+  note_wisp: [64, 320, 128, 128, () => {}],
+  note_wave: [192, 320, 128, 128, () => {}],
 };
 
 function radial(c, cx, cy, r, stops) {

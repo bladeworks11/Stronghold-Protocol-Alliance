@@ -13,7 +13,8 @@
 # Without any art the game still runs with placeholder visuals.
 #
 # Run:  docker run -d --name stronghold -p 3000:3000 --restart unless-stopped stronghold-protocol
-# Env:  PORT (3000), HOST (0.0.0.0), SP_COMBAT (client|server), SP_VERIFY (off|sample|all), TRUST_PROXY (auto|1|0), DEBUG
+# Env:  PORT (3000), HOST (0.0.0.0), SP_COMBAT (client|server), SP_VERIFY (off|sample|all), TRUST_PROXY (auto|1|0), DEBUG,
+#       SP_PROFILES (off: no account sync; its files live in /app/profiles — mount a volume to keep them)
 
 ARG NODE_IMAGE=node:22-alpine
 
@@ -64,7 +65,7 @@ COPY --from=build /app/schemas ./schemas
 COPY --from=build /app/docs/PLUGIN*.md /app/docs/plugin-catalog.example.json ./docs/
 # Root-owned templates and author guides remain visible when /app/plugins is a bind mount or named volume.
 COPY --from=build /app/plugin-resources ./plugin-resources
-RUN mkdir -p /app/plugins && chown node:node /app/plugins
+RUN mkdir -p /app/plugins /app/profiles && chown -R node:node /app/plugins /app/profiles
 # research tables: read by server/sim/nodeData.js as a fallback
 COPY --from=build /app/docs/research ./docs/research
 

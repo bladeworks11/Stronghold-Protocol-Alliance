@@ -416,6 +416,12 @@ export class Lobby {
      */
     this.autoApplyPlugins = null;
     this.offContentStale = plugins?.onContentStale?.((cs, ids) => this.pluginsChanged(cs, ids, 'content')) || null;
+    /**
+     * 账号同步: `(room, playerId, m.result frame) => void` — the settlement becomes one record in each player's account
+     * (server/statsRecord.js). Set by the server (server/index.js) when it has accounts; null keeps the lobby as it was.
+     * @type {((room: Room, playerId: string|null, msg: any) => void) | null}
+     */
+    this.statsSink = null;
   }
 
   /**
@@ -1409,11 +1415,12 @@ export class Lobby {
     }
   }
 
-  /** Match unicast; m.result frames are also kept for the replay. */
+  /** Match unicast; m.result frames are also kept for the replay (and become an account's record: statsSink). */
   matchSend(room, ctx, playerId, msg) {
     if (msg && msg.t === 'm.result') {
       const data = encode(msg);
       if (data != null) ctx.results.set(playerId, data);
+      try { this.statsSink?.(room, playerId, msg); } catch (e) { this.log.warn('[lobby] stats sink failed', e); }
     }
     return this.sendToPlayer(room, playerId, msg);
   }
@@ -1423,7 +1430,10 @@ export class Lobby {
     const data = this.broadcastRoom(room, msg);
     if (data == null) return;
     if (msg.t === 'm.public') ctx.lastPublic = data;
-    else if (msg.t === 'm.result') ctx.sharedResult = data;
+    else if (msg.t === 'm.result') {
+      ctx.sharedResult = data;
+      try { this.statsSink?.(room, null, msg); } catch (e) { this.log.warn('[lobby] stats sink failed', e); }
+    }
   }
 
   /**

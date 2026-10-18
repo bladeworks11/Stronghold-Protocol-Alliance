@@ -23,6 +23,7 @@
 import { useLayoutEffect, useReducer, useRef } from '../vendor/hooks.module.js';
 import { PHASE } from '../../shared/constants.js';
 import { t } from '../../shared/i18n.js';
+import { notePrefSaved } from './prefBus.js';
 
 /**
  * Create an observable store.
@@ -180,13 +181,21 @@ export function loadPref(key, fallback) {
 }
 
 /**
- * Write a JSON preference to localStorage (silently ignores quota/privacy errors).
+ * Write a JSON preference to localStorage (silently ignores quota/privacy errors) and tell the preference listeners
+ * (public/js/prefBus.js: the account sync uploads them).
  * @param {string} key
  * @param {any} value
  */
 export function savePref(key, value) {
   try { globalThis.localStorage?.setItem(`sp.pref.${key}`, JSON.stringify(value)); } catch { /* ignore */ }
+  notePrefSaved(key, value);
 }
+
+/**
+ * Observe every preference write — including the ones made outside savePref (ui/stats.js reports its own envelope).
+ * Re-exported from public/js/prefBus.js, which carries no imports.
+ */
+export { onPrefSaved } from './prefBus.js';
 
 const identity = (s) => s;
 

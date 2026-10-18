@@ -6,6 +6,8 @@
 //   * DEBUG → the console logger's debug level;
 //   * SP_ASSET_INDEX=0 (or the `assetIndex: false` option) → no content-hash index: plain asset URLs, size-mtime ETags
 //     (assetIndex.js); the index of the default public/ persists in .cache/asset-hashes.json;
+//   * SP_PROFILES=off (or the `profiles: false` option) → no account sync: /api/profile does not exist (profiles.js);
+//     SP_PROFILES_DIR moves its folder (default: profiles/ beside this checkout);
 //   * the served directories (public/, data/, shared/, the content packs' packs/ and the plugins' plugins/ of this
 //     repository unless the options name others), and which startServer() options are handed on to net.js Network and
 //     lobby.js Lobby.
@@ -107,6 +109,22 @@ export function lobbyOptionsFrom(opts) {
     if (opts[k] != null) lobbyOptions[k] = opts[k];
   }
   return lobbyOptions;
+}
+
+/**
+ * The account sync (server/profiles.js: 账号同步, one nickname = one account) out of the startServer() options and the
+ * environment, or null for none: `profiles: false` or SP_PROFILES=0 / off switches it off; `profiles: { dir }` or
+ * SP_PROFILES_DIR moves the folder (default: the repository's own `profiles/`, git-ignored and a volume in a container).
+ * @param {{ profiles?: boolean | { dir?: string } }} opts
+ * @returns {{ dir: string } | null}
+ */
+export function profilesOptionsFrom(opts) {
+  if (opts.profiles === false) return null;
+  const env = String(process.env.SP_PROFILES ?? '').trim().toLowerCase();
+  if (opts.profiles == null && ['0', 'off', 'false', 'no'].includes(env)) return null;
+  const o = typeof opts.profiles === 'object' && opts.profiles ? opts.profiles : {};
+  const dir = o.dir || String(process.env.SP_PROFILES_DIR || '').trim() || path.join(ROOT, 'profiles');
+  return { dir: path.resolve(dir) };
 }
 
 /** TRUST_PROXY env → net.js trustProxy ('auto' unless explicitly on/off). @param {string | undefined} v */

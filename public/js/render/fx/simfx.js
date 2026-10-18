@@ -14,6 +14,51 @@ const ANCHOR_SNAP = 0.75;
 
 const num = (v, d) => { const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN; return Number.isFinite(n) ? n : d; };
 
+/**
+ * 本机自用: 丰川祥子's note art — the FALLBACK look, for when the official effects are not drawn: an event the official
+ * layer took never reaches here (render/vfx/wiring.js noteFx spawns the official trail prefab instead; render/app.js
+ * skips the procedural fx then). The pieces come from the local client extraction (tools/local-extract →
+ * `oblvns_attack_01_start`/`_trail` and `oblvns_talent_trail`, textures `oblvns_08` 星芒, `oblvns_02` 谱线,
+ * `oblvns_trail_01` wisp, `oblvns_01` soundwave), copied to public/assets/local/oblvns/ — game art, gitignored, never
+ * committed. Each piece is blitted ONCE into the fx atlas' reserved `note_*` frames (render/textures.js) and the atlas
+ * re-uploaded: a particle must share the atlas' single base texture (ParticleRenderer binds one `uSampler`), so the art
+ * has to live in the atlas rather than arrive as its own texture. Until that lands — and in Node, which has no `Image`
+ * — the note falls back to the procedural flare / streak.
+ */
+const NOTE_ART = Object.freeze({
+  star: '/assets/local/oblvns/note-star.webp',
+  ribbon: '/assets/local/oblvns/note-ribbon.webp',
+  wisp: '/assets/local/oblvns/note-wisp.webp',
+  wave: '/assets/local/oblvns/note-wave.webp',
+});
+const NOTE_ART_TEX = {};               // name → the atlas frame it was blitted into, once loaded (page-wide)
+let noteArtStarted = false;
+
+/** Blit that art into the atlas' reserved frames once (idempotent; browser only). */
+function noteArtLoad(fx) {
+  if (noteArtStarted) return;
+  noteArtStarted = true;
+  if (typeof Image !== 'function' || !fx.atlas || !fx.atlas.canvas) return;
+  for (const [name, url] of Object.entries(NOTE_ART)) {
+    const frame = `note_${name}`;
+    const slot = fx.atlas.tex[frame];
+    if (!slot || !slot.frame) continue;
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const r = slot.frame, ctx = fx.atlas.canvas.getContext('2d');
+        ctx.clearRect(r.x, r.y, r.width, r.height);
+        ctx.drawImage(img, r.x, r.y, r.width, r.height);
+        fx.atlas.base.update();
+        NOTE_ART_TEX[name] = frame;
+      } catch { /* the procedural fallback stays */ }
+    };
+    img.src = url;
+  }
+}
+/** The atlas frame of one piece of that art — the procedural stand-in while it has not been blitted in. */
+const noteArt = (name) => (NOTE_ART_TEX[name] ? NOTE_ART_TEX[name] : (name === 'star' ? 'flare' : 'streak'));
+
 export class FxSim {
   // ---- sim fx (b.ev ['fx', kind, x, y, extra]) -------------------------------------------------------------
 
@@ -193,6 +238,42 @@ export class FxSim {
         }
         this.particle('slash', hx, hy, { tint: col, life: 0.3, s0: hs / 128 * 1.3, s1: hs / 128 * 2.0, a0: 0.9, a1: 0, rot });
         this.particle('glow', hx, hy, { tint: col, life: 0.26, s0: hs / 128 * 0.8, s1: hs / 128 * 1.5, a0: 0.55, a1: 0 });
+        break;
+      }
+      // 本机自用: 丰川祥子 的音符. The official look (see NOTE_ART above): her 星芒 as the head, the 谱线 ribbon stretched
+      // along this step and the wisp under it; `tone` 'arts' (风琴) trades the ribbon for her soundwave and the warm
+      // purple for violet. Until the art is blitted into the atlas (Node, the first frames) the procedural flare / glow /
+      // streak draw it. Every frame is 128 px in the atlas, so a scale is `px per tile / 128` like the table's own.
+      case 'note': {
+        noteArtLoad(this);
+        const z = at.z + 0.4;
+        const arts = ex.tone === 'arts';
+        const tone = arts ? 0xc9a2ff : col;
+        const head = cam.project(at.x, at.y, z, this._p), hx = head.x, hy = head.y, hs = head.s;
+        const loaded = !!NOTE_ART_TEX.star;
+        const fx0 = num(ex.fromX, NaN), fy0 = num(ex.fromY, NaN);
+        if (Number.isFinite(fx0) && Number.isFinite(fy0)) {
+          const t = cam.project(fx0, fy0, z, this._q);
+          const dx = hx - t.x, dy = hy - t.y, len = Math.hypot(dx, dy);
+          if (len > 0.5) {
+            const ang = Math.atan2(dy, dx);
+            const along = (name, tiles, alpha) => {
+              const w = (hs / 128) * tiles;   // the sprite's height; `sx` stretches it over this step of the flight
+              this.particle(noteArt(name), (hx + t.x) / 2, (hy + t.y) / 2, {
+                tint: arts ? 0xd9c8ff : 0xffffff, life: 0.18, s0: w, s1: w, sx: Math.max(0.35, len / (128 * w)),
+                a0: alpha, a1: 0, rot: ang,
+              });
+            };
+            along(arts ? 'wave' : 'ribbon', 0.5, arts ? 0.42 : 0.55);   // 谱线 / 声波 along the step
+            if (loaded) along('wisp', 0.7, 0.3);
+          }
+          if (!loaded) this.streak(fx0, fy0, at.x, at.y, z - 0.05, tone, 0.3);
+        }
+        this.particle(noteArt('star'), hx, hy, {
+          tint: arts ? 0xd9c8ff : 0xffffff, life: 0.26, s0: (hs / 128) * 0.62,
+          s1: (hs / 128) * 0.4, a0: 0.95, a1: 0, spin: arts ? -5 : 5,
+        });
+        this.particle('glow', hx, hy, { tint: tone, life: 0.24, s0: (hs / 128) * 0.7, s1: (hs / 128) * 1.05, a0: 0.45, a1: 0 });
         break;
       }
       case 'wave': {
