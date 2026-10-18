@@ -1516,7 +1516,11 @@ function MatchScreen() {
       }
       if (act === 'retreat' || act === 'sell') {
         if (!L.showPrep || L.drag || L.facing || L.selBusy || L.pen || !pointer || pointer.buttons) return;
-        const uid = L.view?.pieceAtClientPoint(pointer.x, pointer.y);
+        // The SELECTED piece wins: the underframe's 撤退 / 出售 buttons act on it, and the hotkey should hit what the
+        // player sees selected. The piece under the pointer only answers when nothing is selected (the old behaviour
+        // sold whatever the cursor happened to hover — a different operator than the selected one).
+        const selUid = L.sel?.uid;
+        const uid = Number.isInteger(selUid) ? selUid : L.view?.pieceAtClientPoint(pointer.x, pointer.y);
         const hovered = Number.isInteger(uid) ? L.placeCtx.pieces.get(uid) : null;
         if (hovered?.piece.kind !== 'chess') return;
         const available = underframeActions(L.placeCtx, uid);

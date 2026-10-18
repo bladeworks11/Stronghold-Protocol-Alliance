@@ -1575,16 +1575,23 @@ export class FxWiring {
     return true;
   }
 
-  /** Where a note flies: (x, y) NOTE_Z tiles up, in the effect frame (whose z points down: a board height h is −h). */
+  /**
+   * Where a note flies. The sim's fx (x, y) are board tiles (server: unit.x / unit.y, the field column / row); the
+   * official effects layer places in Unity's battle frame, where a board point (x, y, h) is (x − 10, y − 9, −h)
+   * (render/vfx/mounts.js unitPoint, the frame system.js U2B maps back to the board): NOTE_Z tiles up, z pointing down.
+   */
   _notePlace(x, y) {
     const g = Number(this.ofx.ctx?.heightAt?.(Math.round(y), Math.round(x))) || 0;
-    return { pos: [x, y, -(g + NOTE_Z)], groundZ: -g };
+    return { pos: [x - 10, y - 9, -(g + NOTE_Z)], groundZ: -g };
   }
 
-  /** A tile's own spot, for a skill effect that sits on the caster (its prefab nodes give the height). */
+  /**
+   * A tile's own spot, for a skill effect that sits on the caster (its prefab nodes give the height) — the same
+   * board → Unity frame conversion as _notePlace.
+   */
   _spotPlace(x, y) {
     const g = Number(this.ofx.ctx?.heightAt?.(Math.round(y), Math.round(x))) || 0;
-    return { pos: [x, y, -g], groundZ: -g };
+    return { pos: [x - 10, y - 9, -g], groundZ: -g };
   }
 
   /** b.ev 'die': the unit's own death effect or the generic one. */

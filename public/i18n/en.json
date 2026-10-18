@@ -2217,5 +2217,6 @@
   "将删除本机保存的 {n} 条对局记录。账号同步已开启：服务器上的那份不会被删除，下次同步会再合并回来——要一起删除请用 设置 → 账号同步 →「删除服务器上的设置」。": "This deletes the {n} matches saved on this device. Account sync is on: the copy on the server is not deleted and comes back with the next sync — to delete it too, use Settings → Account sync → \"Delete the settings on the server\".",
   "本机保存：开启账号同步后，每局结算由服务器按代号存一份（换设备能接上），本机也留一份；关闭同步则只在本机。同盟对局里队友的代号也在记录中（导出文件里同样有）。": "Saved on this device. With account sync on, every settled match is also stored on the server under your nickname (another device picks it up) and this device keeps its own copy; with sync off nothing leaves this browser. Teammates' codenames are part of the records (and of an export file).",
   "已清空本机统计数据（账号同步开启时，服务器上的记录仍在）": "Cleared the statistics on this device (with account sync on, the records on the server remain)",
-  "累计保留战绩中获得的奖杯": "Trophies earned across the matches kept"
+  "累计保留战绩中获得的奖杯": "Trophies earned across the matches kept",
+  "代号「{name}」在服务器上已有设置，正在同步…": "\"{name}\" has settings on the server — syncing…"
 }

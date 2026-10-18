@@ -138,7 +138,7 @@ describe('丰川祥子 的音符: 音符自己会被画出来 (本机自用)', (
     const skill = (mode, key, tag) => w.simFx('oblvnsSkill', 5, 10, { id: 1, mode, key, tag });
     assert.equal(skill('once', 'oblvns_skill_03_start', 's3start'), true);
     assert.equal(spawned.length, 1);
-    assert.deepEqual(spawned[0].at.pos, [5, 10, -0.5], 'at her tile, on its ground');
+    assert.deepEqual(spawned[0].at.pos, [-5, 1, -0.5], 'at her tile, on its ground (the effect frame: board − (10, 9))');
     assert.equal(spawned[0].opts.loop, undefined, 'a start is a one-shot');
     assert.equal(skill('loop', 'oblvns_skill_03_range', 's3range'), true);
     assert.equal(skill('loop', 'oblvns_skill_03_buff', 's3buff'), true);
@@ -156,6 +156,32 @@ describe('丰川祥子 的音符: 音符自己会被画出来 (本机自用)', (
     assert.ok(spawned[3].killed, 'clear() kills the live loops');
   });
 
+  test('her effects land on her tile: the sim\'s board (x, y) is the effect frame\'s (x − 10, y − 9, −height)', async () => {
+    const { FxWiring, NOTE_Z } = await import('../../public/js/render/vfx/wiring.js');
+    const spawned = [];
+    const ofx = {
+      active: true,
+      lib: { has: () => true },
+      ctx: { heightAt: () => 0.4 },
+      spawn(key, place) {
+        const h = { key, at: { ...place }, place() {}, stop() {}, kill() {} };
+        spawned.push(h);
+        return h;
+      },
+    };
+    const w = new FxWiring(ofx);
+    const note = (x, y, id) => w.simFx('oblvnsNote', x, y, { note: id, trail: 'oblvns_attack_01_trail', tone: 'phys' });
+    // her tile on the left half (col 5, row 10): the effect frame\'s (−5, 1), NOTE_Z above the tile\'s 0.4
+    assert.equal(note(5, 10, 1), true);
+    assert.deepEqual(spawned[0].at, { pos: [-5, 1, -(0.4 + NOTE_Z)], groundZ: -0.4 }, 'on her tile, not 10 × 9 tiles off it');
+    // the right-hand helper of a two-helper 联防: the sim\'s column already carries colOffset +8 (board 3 → field 11)
+    assert.equal(note(11, 10, 2), true);
+    assert.deepEqual(spawned[1].at.pos, [1, 1, -(0.4 + NOTE_Z)], 'the field column, no offset added or lost');
+    // a skill effect sits on her tile\'s ground (its prefab nodes give the height)
+    assert.equal(w.simFx('oblvnsSkill', 5, 10, { id: 1, mode: 'once', key: 'oblvns_skill_03_start', tag: 's3start' }), true);
+    assert.deepEqual(spawned[2].at, { pos: [-5, 1, -0.4], groundZ: -0.4 }, 'the same tile as a unit\'s feet (mounts.js unitPoint)');
+    w.clear();
+  });
   test('the official layer follows a flight: one trail per note, moved along it, its impact on a hit and its stop at the end', async () => {
     const { FxWiring, NOTE_Z } = await import('../../public/js/render/vfx/wiring.js');
     const spawned = [];
@@ -176,11 +202,11 @@ describe('丰川祥子 的音符: 音符自己会被画出来 (本机自用)', (
     const fxNote = (note, x, extra = {}) => w.simFx('oblvnsNote', x, 10, { note, trail: 'oblvns_attack_01_trail', tone: 'phys', ...extra });
     assert.equal(fxNote(7, 5), true, 'the first event of a flight spawns its official trail');
     assert.equal(spawned.length, 1);
-    assert.deepEqual(spawned[0].at.pos, [5, 10, -NOTE_Z], 'placed where the note flies');
+    assert.deepEqual(spawned[0].at.pos, [-5, 1, -NOTE_Z], 'placed where the note flies');
     assert.equal(spawned[0].opts.loop, true, 'a looping trail, one per flight');
     assert.equal(fxNote(7, 5.5), true);
     assert.equal(spawned.length, 1, 'the next event moves the same trail');
-    assert.deepEqual(spawned[0].placed.at(-1).pos, [5.5, 10, -NOTE_Z]);
+    assert.deepEqual(spawned[0].placed.at(-1).pos, [-4.5, 1, -NOTE_Z]);
     assert.equal(w.simFx('oblvnsNoteHit', 7, 10, { note: 7, hit: 'oblvns_attack_01_hit' }), true, 'the impact is its own effect');
     assert.equal(spawned.length, 2);
     assert.equal(w.simFx('oblvnsNoteEnd', 7, 10, { note: 7 }), true);

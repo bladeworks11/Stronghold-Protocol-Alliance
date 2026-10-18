@@ -444,10 +444,39 @@ export function setSyncEnabled(on) {
  */
 export function accountEntered(name) {
   const cfg = loadSync();
-  if (!cfg.enabled || !name || cfg.name === name) return;
+  if (!name) return;
+  if (!cfg.enabled) {
+    // A device that never turned the sync on: when the nickname already has an account (another device enabled it),
+    // the nickname IS the account — adopt it without asking. A nickname with no account stays local, so a first-time
+    // player never gets an empty account created behind their back (they can still switch it on in 设置).
+    void adoptOnEntry(name);
+    return;
+  }
+  if (cfg.name === name) return;
   saveSync({ name, at: 0, hash: '', etag: '', sent: [] });
   syncState.set({ name, enabled: true, status: 'syncing', error: null });
   void bootSync(name, { adopt: true });
+}
+
+/**
+ * 新设备首次输入一个已有的代号: turn the sync on and take the account over once (bootSync downloads, applies and
+ * reloads). A nickname the server does not know, or a failed lookup, leaves this browser local and the sync off.
+ * @param {string} name
+ */
+async function adoptOnEntry(name) {
+  syncState.set({ name, enabled: false, status: 'syncing', error: null });
+  let account = null;
+  try {
+    account = await fetchAccount(name);
+  } catch {
+    syncState.set({ name, enabled: false, status: 'off', error: null });
+    return;
+  }
+  if (!account) { syncState.set({ name, enabled: false, status: 'off', error: null }); return; }
+  saveSync({ name, enabled: true, at: 0, hash: '', etag: '', sent: [] });
+  syncState.set({ name, enabled: true, status: 'syncing', error: null });
+  if (typeof notify === 'function') notify(t('代号「{name}」在服务器上已有设置，正在同步…', { name }), 'info');
+  await bootSync(name, { adopt: true });
 }
 
 /** 设置 → 账号同步「上传本机设置」: everything this browser holds goes up and the account follows it. */
