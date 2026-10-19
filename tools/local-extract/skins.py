@@ -151,12 +151,19 @@ def extract_models(ab_root, targets, out_root, manifest, log):
                 log(f"  warn {char_id} {t['battleId']}: {err}")
                 continue
             stem = ex.safe_name(t["skinId"])
-            faces = {}
+            # 官方 prefab 的 Spine 节点名不统一：多数是 Front / Back，少数（浊心斯卡蒂等）只有一个叫 Spine 的节点
+            picked = {}
             for node_name, _active, pptr in nodes:
-                face = str(node_name).lower()
-                if face not in FACES or face in faces:
-                    continue
                 if not pptr or pptr.get("m_FileID"):
+                    continue
+                low = str(node_name).lower()
+                if "back" in low:
+                    picked.setdefault("back", pptr)
+                else:  # front / spine / anything else: the body's first renderer
+                    picked.setdefault("front", pptr)
+            faces = {}
+            for face, pptr in picked.items():
+                if face in faces:
                     continue
                 sda = objects.get(pptr.get("m_PathID"))
                 if sda is None:
