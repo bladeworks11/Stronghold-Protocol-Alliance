@@ -112,3 +112,25 @@ describe('assetUrls', () => {
     assert.equal(tokenAvatarUrl(m, null), null);
   });
 });
+
+describe('assetUrls: worn skins (docs/SKINS.md)', () => {
+  test('a skin\'s own avatar / portrait replace the operator\'s, and a skin without one falls back', () => {
+    const m2 = {
+      chars: {
+        char_x: {
+          avatar: '/assets/char/avatar/char_x.png', portrait: '/assets/char/portrait/char_x_1.png',
+          skins: {
+            'char_x@one#1': { avatar: '/assets/char/x/one_avatar.webp', portrait: '/assets/char/x/one_portrait.webp' },
+            'char_x@bare#2': { name: 'only a model' },
+          },
+        },
+      },
+    };
+    const rec = { charId: 'char_x' };
+    assert.equal(chessAvatarUrl(m2, rec), '/assets/char/avatar/char_x.png', 'no skin: the operator\'s own');
+    assert.equal(chessAvatarUrl(m2, rec, { skin: 'char_x@one#1' }), '/assets/char/x/one_avatar.webp', 'the worn skin\'s avatar');
+    assert.equal(chessPortraitUrl(m2, rec, { skin: 'char_x@one#1' }), '/assets/char/x/one_portrait.webp', 'and its portrait');
+    assert.equal(chessAvatarUrl(m2, rec, { skin: 'char_x@bare#2' }), '/assets/char/avatar/char_x.png', 'a skin without one falls back');
+    assert.equal(chessAvatarUrl(m2, rec, { skin: 'not-a-skin' }), '/assets/char/avatar/char_x.png', 'an unknown skin falls back');
+  });
+});

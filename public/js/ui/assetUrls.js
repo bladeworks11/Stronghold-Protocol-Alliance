@@ -12,11 +12,37 @@ export function uiUrl(m, key) {
 }
 
 /**
- * Operator avatar for a chess record (golden → E2 art when present).
+ * The picture a WORN skin ships for an operator (docs/SKINS.md): `chars[<charId>].skins[<skin>]` written by a cosmetic
+ * plugin's overlay. Null when the skin has no such picture (the caller falls back to the operator's own art — a plugin
+ * that replaced only the model must never leave a broken face).
+ * @param {any} m manifest @param {any} charId an operator id, or its `_2` art id
+ * @param {any} skin the skin key @param {'avatar'|'portrait'} kind @param {boolean} [golden] prefer the E2 picture
+ */
+export function skinArtUrl(m, charId, skin, kind, golden = false) {
+  const chars = obj(obj(m)?.chars);
+  const id = str(charId);
+  const key = str(skin);
+  if (!chars || !id || !key) return null;
+  const base = chars[id] ? id : (id.endsWith('_2') && chars[id.slice(0, -2)] ? id.slice(0, -2) : null);
+  const rec = base ? chars[base] : null;
+  const s = rec && obj(rec.skins) ? rec.skins[key] : null;
+  if (!s) return null;
+  return (golden ? str(s[`${kind}E2`]) : null) || str(s[kind]) || null;
+}
+
+/**
+ * Operator avatar for a chess record (golden → E2 art when present). `opts.skin` (a worn skin id) shows that skin's
+ * avatar instead, when the manifest holds one.
  * @param {any} m manifest
  * @param {any} chess chess.json record (or { assets: { avatar } })
+ * @param {{ skin?: string|null }} [opts]
  */
-export function chessAvatarUrl(m, chess) {
+export function chessAvatarUrl(m, chess, opts = null) {
+  const skin = str(opts && opts.skin);
+  if (skin) {
+    const art = skinArtUrl(m, chess?.charId, skin, 'avatar', !!chess?.isGolden);
+    if (art) return art;
+  }
   const chars = obj(obj(m)?.chars);
   const id = str(chess?.assets?.avatar) || str(chess?.charId);
   if (!chars || !id) return null;
@@ -37,8 +63,13 @@ export function chessAvatarUrl(m, chess) {
  * @param {any} m
  * @param {any} chess
  */
-export function chessPortraitUrl(m, chess) {
+export function chessPortraitUrl(m, chess, opts = null) {
   const chars = obj(obj(m)?.chars);
+  const skin = str(opts && opts.skin);
+  if (skin) {
+    const art = skinArtUrl(m, chess?.charId, skin, 'portrait', !!chess?.isGolden);
+    if (art) return art;
+  }
   const id = str(chess?.assets?.portrait);
   if (!chars) return null;
   if (id) {
