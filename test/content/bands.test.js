@@ -286,6 +286,31 @@ test('潘格尼尼 定制铳械: after 55 funds spent in total, 1 random elite <
   cover('band_paganini');
 });
 
+// 本机自用: the pool pick is uniform over the eligible operators (data/choices.json pool_char_later marks the pool
+// [ASSUMED], and the official text only says 「随机」). 600 seeds: every one of the 6 laterano T4+ operators appears,
+// each within sampling noise of 1/6 (11 %–23 %). Before this change the shared pool's copies made T4 ~54 %.
+test('潘格尼尼 定制铳械: the 6 eligible <拉特兰> operators are equally likely (本机自用 uniform pick)', () => {
+  const N = 600;
+  const names = {};
+  for (let seed = 1; seed <= N; seed++) {
+    const { ps } = setup({ band: 'band_paganini', seed });
+    ps.funds = 200;
+    const grants = spyGrants(ps);
+    ps.spend(55);
+    ps._afterSpend(55, 'test');
+    assert.equal(grants.length, 1, 'seed ' + seed);
+    const c = DATA.chess[grants[0]];
+    assert.ok(c.isGolden && c.tier >= 4 && c.bonds.includes('lateranoShip'));
+    names[c.name] = (names[c.name] || 0) + 1;
+  }
+  const rows = Object.entries(names).sort((a, b) => b[1] - a[1]);
+  assert.equal(rows.length, 6, 'every eligible operator can appear: ' + JSON.stringify(rows));
+  for (const [name, n] of rows) {
+    const pct = n / N;
+    assert.ok(pct > 0.11 && pct < 0.23, `${name}: ${(pct * 100).toFixed(1)}% (uniform: 16.7%)`);
+  }
+});
+
 test('余 文火慢炖: R8 round start — exactly 1 active bond +36 layers, otherwise every active bond +12', () => {
   let s = setup({ band: 'band_yu' });
   s.ps.bondCountBonus.yanShip = 20; s.ps.recompute();

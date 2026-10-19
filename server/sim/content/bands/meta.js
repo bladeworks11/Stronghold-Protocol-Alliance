@@ -256,7 +256,9 @@ K.band_cost_coin_reach_cnt_gain_chess_from_pool = (ps) => ({
     if (ctx.counter('band:paganini:done') > 0) return;
     const spent = ctx.incCounter('band:paganini:spent', Math.max(0, int(ev.amount, 0)));
     if (spent < int(p.coin_cnt, 0)) return;
-    const r = ctx.rollPool(p.pool);
+    // 本机自用: 等概率抽取（uniform，见 spDraft.rollPool）—— 官方文本只说「随机」，
+    // data/choices.json 的 pool_char_later 是 [ASSUMED]；本机按「6 名拉特兰各 1/6」处理。
+    const r = ctx.rollPool(p.pool, { uniform: true });
     if (r && grant(ctx, r.id, { source: 'band' })) ctx.setCounter('band:paganini:done', 1);
   },
 });

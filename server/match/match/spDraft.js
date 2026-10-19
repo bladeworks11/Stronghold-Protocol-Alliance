@@ -431,7 +431,7 @@ export class MatchSpDraft {
    * card-pool group, so a支援 drawn for one seat never spends another group's copies or equipment stock.
    * @returns {{ kind: 'item'|'chess', id: string, golden?: boolean } | null}
    */
-  rollPool(poolId, { shopLevel = 6, extra = null, chessOf = null, player = null, exclude = [] } = {}) {
+  rollPool(poolId, { shopLevel = 6, extra = null, chessOf = null, player = null, exclude = [], uniform = false } = {}) {
     const pool = player ? this.poolFor(player) : this.pool;
     const pools = this.gd.choices.pools && typeof this.gd.choices.pools === 'object' ? this.gd.choices.pools : {};
     const p = typeof poolId === 'string' && Object.hasOwn(pools, poolId) ? pools[poolId] : null;
@@ -449,7 +449,25 @@ export class MatchSpDraft {
       return !pool.has(base) || pool.left(base) > 0;
     };
     let id = null;
-    if (Array.isArray(p.weighted) && p.weighted.length) {
+    if (uniform) {
+      // 本机自用: 等概率抽取（潘格尼尼【定制铳械】）—— 池里所有符合条件的干员等概率，不看共享卡池的副本数。
+      // 官方文本只说「随机」，data/choices.json 的 pool_char_later 是 [ASSUMED]；本机按「6 名拉特兰各 1/6」处理。
+      const minTier = Number.isInteger(p.minTier) ? p.minTier : 1;
+      const maxTier = Number.isInteger(p.maxTier) ? p.maxTier : 6;
+      const bond = typeof p.bond === 'string' ? p.bond : null;
+      const recOf = typeof chessOf === 'function' ? chessOf : (cid) => this.gd.chess(cid);
+      const ids = (Array.isArray(this.gd.visibleChess) ? this.gd.visibleChess : [])
+        .filter((cid) => {
+          const rec = recOf(cid);
+          if (!rec || rec.isGolden) return false;
+          if (rec.tier < minTier || rec.tier > maxTier) return false;
+          if (bond && !(Array.isArray(rec.bonds) && rec.bonds.includes(bond))) return false;
+          if (Array.isArray(p.items) && p.items.length && !p.items.includes(cid)) return false;
+          return true;
+        })
+        .sort();   // 稳定顺序：同一条随机序列在服务端与回放里给出同一个结果
+      id = ids.length ? ids[Math.floor(rng() * ids.length)] : null;
+    } else if (Array.isArray(p.weighted) && p.weighted.length) {
       const pairs = p.weighted.filter((x) => Array.isArray(x) && free(x[0]));
       id = pairs.length ? weightedPick(rng, pairs) : null;
     } else if (Array.isArray(p.items) && p.items.length) {
