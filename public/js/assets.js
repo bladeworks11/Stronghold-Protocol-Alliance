@@ -216,6 +216,27 @@ export function subProfIconUrl(m, sub) {
  * `chars[<charId>].skins[<skinId>].spine`. A skin the manifest does not hold (or one of another operator) draws the
  * operator's own model instead: the caller is a renderer that must always end up with something to draw.
  */
+/**
+ * A Spine entry as the renderer reads it (docs/ASSETS.md): a plugin overlay carries the skeleton's clip data under
+ * `meta` (docs/PLUGINS.md §9, plugin.lock.json), while `render/spine.js` reads flat `anims` / `animations` / `events` /
+ * `hits` / `bounds`. Promote the meta fields the entry does not already have — without this a skin model plays the
+ * default roles (Idle / Attack / Die), which is wrong for an operator whose clips are named differently (信仰搅拌机's
+ * `Attack_Loop`, 宴's `Skill_Start` …).
+ * @param {any} sp a manifest or overlay Spine record
+ * @returns {any} the same record, with its meta's clip data flattened onto it
+ */
+function flatSpine(sp) {
+  const meta = sp && isObj(sp.meta) ? sp.meta : null;
+  if (!meta) return sp;
+  const out = { ...sp };
+  if (out.anims === undefined && isObj(meta.anims)) out.anims = meta.anims;
+  if (out.animations === undefined && isObj(meta.animations)) out.animations = meta.animations;
+  if (out.events === undefined && Array.isArray(meta.events)) out.events = meta.events;
+  if (out.hits === undefined && isObj(meta.hits)) out.hits = meta.hits;
+  if (out.bounds === undefined && (meta.bounds === null || isObj(meta.bounds))) out.bounds = meta.bounds;
+  return out;
+}
+
 export function spineEntry(m, id, opts) {
   const s = str(id);
   if (!s) return null;
@@ -226,28 +247,28 @@ export function spineEntry(m, id, opts) {
       const skin = get(get(ch, 'skins'), wanted);
       if (skin && isObj(skin.spine)) {
         const sp = (opts && opts.back && isObj(skin.spine.back)) ? skin.spine.back : skin.spine.front;
-        if (validSpine(sp)) return sp;
+        if (validSpine(sp)) return flatSpine(sp);
       }
     }
     // no such skin (or no skin asked for): the operator's own model
     if (isObj(ch.spine)) {
       const sp = (opts && opts.back && isObj(ch.spine.back)) ? ch.spine.back : ch.spine.front;
-      return validSpine(sp) ? sp : null;
+      return validSpine(sp) ? flatSpine(sp) : null;
     }
   }
   const tk = get(get(m, 'tokens'), s);
   if (tk) {
-    const web = validSpine(tk.spine) ? tk.spine : null;
+    const web = validSpine(tk.spine) ? flatSpine(tk.spine) : null;
     return (opts && opts.local && localSpineEntry(tk.spineLocal, opts.local, web)) || web;
   }
   const en = get(get(m, 'enemies'), s);
   if (en) {
     let web = null;
-    if (validSpine(en.spine)) web = en.spine;
+    if (validSpine(en.spine)) web = flatSpine(en.spine);
     else {
       const alias = str(en.spineAliasOf);
       const al = alias ? get(get(m, 'enemies'), alias) : null;
-      web = al && validSpine(al.spine) ? al.spine : null;
+      web = al && validSpine(al.spine) ? flatSpine(al.spine) : null;
     }
     return (opts && opts.local && localSpineEntry(en.spineLocal, opts.local, web)) || web;
   }
@@ -291,7 +312,10 @@ export function hasBackSpine(m, id, skinId) {
 }
 
 export function validSpine(sp) {
-  return isObj(sp) && typeof sp.skel === 'string' && /^\/[^\s]*\.skel$/.test(sp.skel) && typeof sp.atlas === 'string' && isObj(sp.anims);
+  // A plugin overlay's model carries its clip data under `meta` (docs/PLUGINS.md §9, plugin.lock.json), not as a flat
+  // `anims`: both shapes are a usable Spine entry (spineEntry flattens the meta — flatSpine).
+  return isObj(sp) && typeof sp.skel === 'string' && /^\/[^\s]*\.skel$/.test(sp.skel) && typeof sp.atlas === 'string'
+    && (isObj(sp.anims) || isObj(sp.meta && sp.meta.anims));
 }
 
 /** Best 2D picture for a unit asset id (operator avatar, token avatar, enemy icon, item icon); `opts` reaches avatarUrl. */
