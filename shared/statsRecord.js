@@ -38,7 +38,7 @@ export function recordId(res, myId) {
   const parts = [r.seed ?? '-', r.durationMs ?? '-', r.modeId ?? '-', r.roundsPassed ?? '-', r.victory ? 1 : 0, myId ?? '-'];
   // A test result must not collide with a real match of the same seed (upstream 0.3.1): the suffix is absent otherwise.
   if (r.test === true) parts.push('test');
-  return `r1.`;
+  return `r1.${fnv1a(parts.join('|'))}`;
 }
 
 /** A plain object (not null, not an array). @param {any} v */

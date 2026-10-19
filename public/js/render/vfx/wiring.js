@@ -1539,13 +1539,14 @@ export class FxWiring {
       const key = lc(e.key);
       if (!key || !this.ofx.lib.has(key)) return false;
       const place = this._spotPlace(x, y);
+      const track = this._kitOrient(key, place, this.view(e.id));
       if (e.mode !== 'loop') {
-        this.ofx.spawn(key, place, {});
+        this.ofx.spawn(key, place, track ? { track } : {});
         return true;
       }
       const old = this.kitFxLoops.get(slot);
       if (old) { old.stop(); this.kitFxLoops.delete(slot); }   // one live loop per slot (a timbre switch swaps it)
-      const h = this.ofx.spawn(key, place, { loop: true, important: true });
+      const h = this.ofx.spawn(key, place, { loop: true, important: true, ...(track ? { track } : {}) });
       if (!h) return false;
       this.kitFxLoops.set(slot, h);
       return true;
@@ -1566,7 +1567,7 @@ export class FxWiring {
     if (kind !== 'oblvnsNote' || e.note == null) return false;
     const key = lc(e.trail);
     if (!key || !this.ofx.lib.has(key)) return false;
-    const place = this._notePlace(x, y);
+    const place = this._notePlace(x, y, this._noteYaw(e));
     const live = this.notes.get(e.note);
     if (live) { live.h.place(place); return true; }
     const h = this.ofx.spawn(key, place, { loop: true });   // a looping trail: one per flight, moved along it
@@ -1576,13 +1577,47 @@ export class FxWiring {
   }
 
   /**
+   * 本机自用: the yaw of a note's flight in the effect frame (Unity +x = +col, +y = +row). The kit sends `dr` / `dc`,
+   * the board row / column deltas of the note's heading; without them the trail keeps the art's default direction.
+   */
+  _noteYaw(e) {
+    const dr = Number(e.dr), dc = Number(e.dc);
+    return Number.isFinite(dr) && Number.isFinite(dc) && (dr !== 0 || dc !== 0) ? Math.atan2(dr, dc) : 0;
+  }
+
+  /**
+   * 本机自用: turn a skill effect the way the official client turns it on its unit — FLIP_TWO_SIDE mirrors a start
+   * effect for a left-facing caster, FOUR_DIRECTION / `_useBodyRotation` turns S3's ground range with her direction
+   * (`_orient`). The prefab generally loads after its fx event, so when its metadata is not here yet the placement is
+   * applied from the effect's `track` callback on the first frame it is known; an already loaded prefab (a second cast)
+   * is turned at once and needs no track.
+   * @returns {((fx: any) => void)|null} the track callback to hand to ofx.spawn (null when already placed / no view)
+   */
+  _kitOrient(key, place, v) {
+    if (!v) return null;
+    const pose = this.pose(v);
+    let done = false;
+    const apply = (fx) => {
+      if (done) return;
+      const def = this.ofx.lib.def(key);
+      if (!def) return;
+      done = true;
+      this._orient(def, place, pose, {}, v);
+      if (fx) fx.place({ yaw: place.yaw, mirror: place.mirror, flipY: place.flipY });
+    };
+    apply(null);
+    return done ? null : apply;
+  }
+
+  /**
    * Where a note flies. The sim's fx (x, y) are board tiles (server: unit.x / unit.y, the field column / row); the
    * official effects layer places in Unity's battle frame, where a board point (x, y, h) is (x − 10, y − 9, −h)
    * (render/vfx/mounts.js unitPoint, the frame system.js U2B maps back to the board): NOTE_Z tiles up, z pointing down.
+   * `yaw` turns the trail's art along the flight (`_noteYaw`).
    */
-  _notePlace(x, y) {
+  _notePlace(x, y, yaw = 0) {
     const g = Number(this.ofx.ctx?.heightAt?.(Math.round(y), Math.round(x))) || 0;
-    return { pos: [x - 10, y - 9, -(g + NOTE_Z)], groundZ: -g };
+    return { pos: [x - 10, y - 9, -(g + NOTE_Z)], groundZ: -g, yaw };
   }
 
   /**

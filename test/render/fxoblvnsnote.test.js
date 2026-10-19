@@ -156,6 +156,77 @@ describe('丰川祥子 的音符: 音符自己会被画出来 (本机自用)', (
     assert.ok(spawned[3].killed, 'clear() kills the live loops');
   });
 
+  test('her prefabs take the unit\'s direction: the start mirrors and S3\'s ground range / the note trail turn on a left-facing half', async () => {
+    const { FxWiring } = await import('../../public/js/render/vfx/wiring.js');
+    // the extracted prefabs' own metadata (public/assets/local/fx/prefabs): the starts are FLIP_TWO_SIDE with a rotationY
+    // helper, S3's range is FOUR_DIRECTION with _useBodyRotation, a trail is a projectile body (art along +x)
+    const DEFS = {
+      oblvns_skill_03_start: { rotateType: 1, rotY: 2, leftIsDefault: false },
+      oblvns_skill_03_range: { rotateType: 2, rotY: -1, useBodyRotation: true },
+      oblvns_attack_01_trail: { rotateType: 0, rotY: -1 },
+    };
+    const spawned = [];
+    const ofx = {
+      active: true,
+      lib: { has: (k) => k in DEFS, def: (k) => DEFS[k] || null },
+      ctx: { heightAt: () => 0 },
+      spawn(key, place, opts) {
+        const h = { key, opts, at: { ...place }, placed: [], place(o) { this.placed.push(o); }, stop() {}, kill() {} };
+        spawned.push(h);
+        return h;
+      },
+    };
+    const views = {
+      7: { id: 7, x: 15, y: 10, z: 0, dir: 'LEFT', visFacing: -1, destroyed: false },   // the right-hand half of a pair field
+      8: { id: 8, x: 5, y: 10, z: 0, dir: 'RIGHT', visFacing: 1, destroyed: false },    // the left-hand half
+    };
+    const w = new FxWiring(ofx, { view: (id) => views[id] || null });
+    const skill = (id, mode, key, tag) => w.simFx('oblvnsSkill', views[id].x, views[id].y, { id, mode, key, tag });
+    // LEFT: the official client turns a FOUR_DIRECTION effect with her body (bodyYaw LEFT = π) and mirrors FLIP_TWO_SIDE
+    assert.equal(skill(7, 'loop', 'oblvns_skill_03_range', 's3range'), true);
+    assert.equal(spawned.at(-1).at.yaw, Math.PI, 'the ground range turns with her (LEFT)');
+    assert.equal(skill(7, 'once', 'oblvns_skill_03_start', 's3start'), true);
+    assert.equal(spawned.at(-1).at.flipY, true, 'the cast effect mirrors for a left-facing unit');
+    w.simFx('oblvnsNote', 15, 10, { note: 71, trail: 'oblvns_attack_01_trail', dr: 0, dc: -1 });
+    assert.equal(spawned.at(-1).at.yaw, Math.PI, 'the note trail points the way the note flies');
+    w.simFx('oblvnsNote', 15, 10, { note: 71, trail: 'oblvns_attack_01_trail', dr: 1, dc: 0 });
+    assert.equal(spawned.at(-1).placed.at(-1).yaw, Math.PI / 2, 'and follows it when the note homes');
+    // RIGHT: the same events keep the art's own direction (the left half was never wrong)
+    assert.equal(skill(8, 'loop', 'oblvns_skill_03_range', 's3range'), true);
+    assert.equal(spawned.at(-1).at.yaw, 0, 'the ground range keeps her direction (RIGHT)');
+    assert.equal(skill(8, 'once', 'oblvns_skill_03_start', 's3start'), true);
+    assert.equal(spawned.at(-1).at.flipY, false, 'the cast effect is not mirrored for a right-facing unit');
+    w.simFx('oblvnsNote', 5, 10, { note: 81, trail: 'oblvns_attack_01_trail', dr: 0, dc: 1 });
+    assert.equal(spawned.at(-1).at.yaw, 0, 'a rightward note trail is unturned');
+    w.clear();
+  });
+
+  test('a prefab that loads after its fx event is turned once its metadata is known', async () => {
+    const { FxWiring } = await import('../../public/js/render/vfx/wiring.js');
+    const defs = new Map();
+    const spawned = [];
+    const ofx = {
+      active: true,
+      lib: { has: () => true, def: (k) => defs.get(k) || null },
+      ctx: { heightAt: () => 0 },
+      spawn(key, place, opts) {
+        const h = { key, opts, at: { ...place }, place() {}, stop() {}, kill() {} };
+        spawned.push(h);
+        return h;
+      },
+    };
+    const v = { id: 7, x: 15, y: 10, z: 0, dir: 'LEFT', visFacing: -1, destroyed: false };
+    const w = new FxWiring(ofx, { view: () => v });
+    // the extraction's files load on demand: at the fx event the metadata is not here yet
+    assert.equal(w.simFx('oblvnsSkill', 15, 10, { id: 7, mode: 'loop', key: 'oblvns_skill_03_range', tag: 's3range' }), true);
+    const h = spawned.at(-1);
+    assert.equal(h.at.yaw, undefined, 'nothing to turn it by yet — the art keeps its own direction');
+    defs.set('oblvns_skill_03_range', { rotateType: 2, rotY: -1, useBodyRotation: true });
+    const fx = { yaw: 0, mirror: false, flipY: false, place(o) { Object.assign(this, o); } };
+    h.opts.track(fx);
+    assert.equal(fx.yaw, Math.PI, 'the first frame after the load turns it with her direction');
+    w.clear();
+  });
   test('her effects land on her tile: the sim\'s board (x, y) is the effect frame\'s (x − 10, y − 9, −height)', async () => {
     const { FxWiring, NOTE_Z } = await import('../../public/js/render/vfx/wiring.js');
     const spawned = [];
@@ -173,7 +244,7 @@ describe('丰川祥子 的音符: 音符自己会被画出来 (本机自用)', (
     const note = (x, y, id) => w.simFx('oblvnsNote', x, y, { note: id, trail: 'oblvns_attack_01_trail', tone: 'phys' });
     // her tile on the left half (col 5, row 10): the effect frame\'s (−5, 1), NOTE_Z above the tile\'s 0.4
     assert.equal(note(5, 10, 1), true);
-    assert.deepEqual(spawned[0].at, { pos: [-5, 1, -(0.4 + NOTE_Z)], groundZ: -0.4 }, 'on her tile, not 10 × 9 tiles off it');
+    assert.deepEqual(spawned[0].at, { pos: [-5, 1, -(0.4 + NOTE_Z)], groundZ: -0.4, yaw: 0 }, 'on her tile, not 10 × 9 tiles off it');
     // the right-hand helper of a two-helper 联防: the sim\'s column already carries colOffset +8 (board 3 → field 11)
     assert.equal(note(11, 10, 2), true);
     assert.deepEqual(spawned[1].at.pos, [1, 1, -(0.4 + NOTE_Z)], 'the field column, no offset added or lost');
