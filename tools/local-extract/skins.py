@@ -14,7 +14,11 @@ tools/fetch-assets sources). Only skins of operators the installation's `data/as
 
 Usage:
   python tools/local-extract/skins.py --ab "<client>/Arknights_Data/StreamingAssets/AB/Windows" \
-      --out plugins/skin-pack [--limit N] [--chars char_003_kalts,...] [--no-images] [--quiet]
+      --out plugins/skin-pack [--limit N] [--chars char_003_kalts,...] [--no-images] [--quiet] [--hot <dir>]
+
+  --hot: the client's hot-updated bundles (Arknights_Data/PersistentData/Bundles), found automatically beside
+  the AB folder when it exists. A 时装 whose bundle arrived after the base install lives only there, so a hot copy
+  of a bundle replaces the base one.
 
 The output is a plugin folder ready for `node tools/plugin.mjs pack` (the Spine models need its
 plugin.lock.json) and `node tools/plugin.mjs check`.
@@ -43,6 +47,34 @@ DEFAULT_BATTLE = (None, "", "DefaultSkin")
 
 def log_quiet(*_a):
     pass
+
+
+def find_hot(ab_root):
+    """The client's hot-updated bundle root beside this AB folder, when the install has one."""
+    for parent in Path(ab_root).parents:
+        cand = parent / 'PersistentData' / 'Bundles'
+        if cand.is_dir():
+            return cand
+    return None
+
+
+def bundle_path(ab_root, hot_root, kind, name):
+    """A bundle by directory + file name: the hot-updated copy wins over the base install's."""
+    if hot_root is not None:
+        hot = Path(hot_root) / kind / name
+        if hot.is_file():
+            return hot
+    return Path(ab_root) / kind / name
+
+
+def bundle_glob(ab_root, hot_root, pattern):
+    """Every bundle matching `pattern` ('spritepack/ui_char_avatar_*.ab'): hot copies replace same-named base files."""
+    kind, _, mask = pattern.partition('/')
+    found = {}
+    for base in ((Path(ab_root),) if hot_root is None else (Path(ab_root), Path(hot_root))):
+        for f in sorted((base / kind).glob(mask)):
+            found[f.name] = f
+    return [found[k] for k in sorted(found)]
 
 
 def load_json(path):
@@ -77,13 +109,13 @@ def wanted_skins(skin_table, chars, only=()):
     return out
 
 
-def sprite_scan(ab_root, patterns, names, out_dir, log, quality=90):
+def sprite_scan(ab_root, patterns, names, out_dir, log, quality=90, hot_root=None):
     """Save the sprite of every wanted name found in `patterns` as `out_dir/<stem>.webp`; {name: rel path}."""
     import UnityPy
     wanted = dict(names)  # sprite name -> (stem, rel dir)
     saved = {}
     for pattern in patterns:
-        for bundle in sorted(Path(ab_root).glob(pattern)):
+        for bundle in bundle_glob(ab_root, hot_root, pattern):
             if not wanted:
                 break
             try:
@@ -113,14 +145,15 @@ def sprite_scan(ab_root, patterns, names, out_dir, log, quality=90):
     return saved
 
 
-def extract_models(ab_root, targets, out_root, manifest, log):
+def extract_models(ab_root, targets, out_root, manifest, log, hot_root=None):
     """Write every target's battle Spine; fills `manifest[group]` (paths rewritten to plugin-relative)."""
     import UnityPy
     by_char = {}
     for t in targets:
         by_char.setdefault(t["charId"], []).append(t)
     for char_id, list_ in sorted(by_char.items()):
-        bundles = [p for p in (Path(ab_root) / "skinpack" / f"{char_id}.ab", Path(ab_root) / "charpack" / f"{char_id}.ab") if p.is_file()]
+        bundles = [p for p in (bundle_path(ab_root, hot_root, "skinpack", f"{char_id}.ab"),
+                               bundle_path(ab_root, hot_root, "charpack", f"{char_id}.ab")) if p.is_file()]
         if not bundles:
             log(f"  skip (no bundle) {char_id}")
             continue
@@ -255,11 +288,15 @@ def main():
     ap.add_argument("--limit", type=int, default=0, help="only the first N operators (a trial run)")
     ap.add_argument("--chars", default="", help="comma-separated charIds to restrict to")
     ap.add_argument("--no-images", action="store_true", help="skip avatars and portraits")
+    ap.add_argument("--hot", default="", help="the client's hot-updated bundles (PersistentData/Bundles; found automatically)")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
     log = log_quiet if args.quiet else print
 
     ab_root = Path(args.ab)
+    hot_root = Path(args.hot) if args.hot else find_hot(ab_root)
+    if hot_root is not None and not hot_root.is_dir():
+        hot_root = None
     out_root = Path(args.out)
     if not (ab_root / "skinpack").is_dir():
         sys.exit(f"not a client AB folder: {ab_root}")
@@ -280,14 +317,14 @@ def main():
         log("[skins] avatars")
         wanted = {t["avatarId"]: ("avatar", f"{SKINS_ROOT}/{ex.safe_name(t['skinId'])}")
                   for t in targets if t.get("avatarId")}
-        avatars = sprite_scan(ab_root, ["spritepack/ui_char_avatar_*.ab"], wanted, out_root, log)
+        avatars = sprite_scan(ab_root, ["spritepack/ui_char_avatar_*.ab"], wanted, out_root, log, hot_root=hot_root)
         log("[skins] portraits")
         wanted = {t["portraitId"]: ("portrait", f"{SKINS_ROOT}/{ex.safe_name(t['skinId'])}")
                   for t in targets if t.get("portraitId")}
-        portraits = sprite_scan(ab_root, ["spritepack/char_portrait_*.ab"], wanted, out_root, log)
+        portraits = sprite_scan(ab_root, ["spritepack/char_portrait_*.ab"], wanted, out_root, log, hot_root=hot_root)
 
     log("[skins] battle models")
-    extract_models(ab_root, targets, out_root, {}, log)
+    extract_models(ab_root, targets, out_root, {}, log, hot_root=hot_root)
     files = {}
     for group in sorted({g for t in targets for g in (t.get("groups") or {}).values()}):
         files[group] = fix_group(out_root, group)
