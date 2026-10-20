@@ -4,7 +4,7 @@
 // rig does not have fall back to its own resolve, or off.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { inheritRoles, resolveRoles, roleAnimationNames } from '../../tools/assets/anim-roles.mjs';
+import { inheritBounds, inheritRoles, resolveRoles, roleAnimationNames } from '../../tools/assets/anim-roles.mjs';
 
 const CLIPS = ['Attack', 'Attack_Begin', 'Attack_End', 'Attack_Loop', 'Die', 'Idle', 'Skill_2_Loop', 'Skill_3_Begin',
   'Skill_3_End', 'Skill_3_Idle', 'Skill_Begin', 'Skill_End', 'Skill_Loop', 'Start'];
@@ -64,4 +64,12 @@ test('inheritRoles: a clip the skin rig lacks falls back to its own resolve, nev
   assert.equal(r.attack.loop, 'Attack');
   assert.equal(r.skill.loop, 'Attack');
   for (const n of roleAnimationNames(r)) assert.ok(rig.includes(n), `${n} is not in the rig`);
+});
+
+test('inheritBounds: a skin without setup-pose bounds keeps its body\'s, never the renderer default', () => {
+  const body = { x: -345.685, y: -2.442, width: 1223.606, height: 631.382 };
+  assert.deepEqual(inheritBounds(null, body), body, '信仰搅拌机 boc#12 parses to none: the client would size it as a chibi');
+  const own = { x: -229.342, y: -15.379, width: 378.568, height: 409.91 };
+  assert.deepEqual(inheritBounds(own, body), own, 'a skin that has bounds of its own keeps them');
+  assert.equal(inheritBounds(null, null), null, 'nothing to inherit stays absent');
 });

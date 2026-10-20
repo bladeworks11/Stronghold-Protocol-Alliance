@@ -33,16 +33,19 @@ const ENEMIES = {
   enemy_dummy: dummy('enemy_dummy'),
   enemy_tough: dummy('enemy_tough', { def: 1 }),
   enemy_magic: dummy('enemy_magic', { res: 1 }),
+  enemy_walk: dummy('enemy_walk', { speed: 1 }),   // a foe that keeps walking (追踪移动's own test)
+  enemy_fast: dummy('enemy_fast', { speed: 2.5 }), // the fastest moveSpeed in data/enemies.json (1.25 tiles/s)
 };
 /** Every 自选 form: [tier, elite, module]. */
 const FORMS_ALL = [[5, false, null], [6, false, null], [5, true, null], [6, true, null], [5, true, LORY], [6, true, LORY]];
 
-/** A battle with her as uid 1 at (row, col) facing RIGHT, plus `others`. */
-function field({ tier = 6, elite = true, mod = null, skill = 2, row = 10, col = 5, others = [], seed = 5 } = {}) {
+/** A battle with her as uid 1 at (row, col) facing RIGHT, plus `others`. `routes` overrides the flat stage's. */
+function field({ tier = 6, elite = true, mod = null, skill = 2, row = 10, col = 5, others = [], seed = 5, routes = null } = {}) {
   const h = makeBattle({
     defs: { enemies: ENEMIES }, timeLimit: 900, autoFinish: false, seed,
     flags: { dpPerSec: 0, dpMax: 999 }, hooks: ['damaged', 'attack', 'skillStart', 'spGain'], captureNoisy: true,
     units: [{ uid: 1, diy: { slot: SLOT[tier], charId: OBLVNS, skillIndex: skill, uniEquipId: mod }, elite, row, col }, ...others],
+    routes,
   });
   h.step();
   return { h, u: h.unit(1) };
@@ -112,6 +115,49 @@ test('the note IS her attack: one damage instance per attack, the engine\'s own 
   // the note leaves her tile with the attack and lands a flight later (the damage is not the attack's own hit)
   assert.ok(mine[0].t > attacks[0].t, `the note landed after the attack (${mine[0].t.toFixed(2)} > ${attacks[0].t.toFixed(2)})`);
   done(h);
+});
+
+test('追踪移动: every note lands on a foe that keeps walking (a turn-lagged note used to circle it for ever)', () => {
+  // The foe walks along her own row into her 3-12 range, where she blocks it, so she attacks it for the whole run.
+  // Before the fix every note settled into a 0.13–0.75 tile orbit around it: the 转向速度 lag cannot point a note that
+  // is inside its own turning circle (track·dt / turn = 0.4 tiles for NOTE.aimed) at the foe, and the one-step arrival
+  // test needs 0.067 tiles — 9 of the 16 notes were still in the air after 20 s and only 7 had landed.
+  const walk = (key, seed = 5) => {
+    const { h, u } = field({ seed, routes: [{ motion: 'WALK', start: [10, 10], end: [10, 2], checkpoints: [] }] });
+    const foe = h.spawn(key, { pos: [10, 10] });
+    return { h, u, foe };
+  };
+  const flights = (h, u, secs) => {
+    const first = new Map(), last = new Map();
+    for (let i = 0; i < 30 * secs; i++) {
+      h.step();
+      for (const n of u.mem['oblvns:notes'] ?? []) {
+        if (!first.has(n.id)) first.set(n.id, h.b.time);
+        last.set(n.id, h.b.time);
+      }
+    }
+    const maxLife = Math.max(...[...first].map(([id, t0]) => last.get(id) - t0));
+    return { first, maxLife };
+  };
+  // a 1.0 and a 2.5 moveSpeed foe: the orbit was not the foe's speed, it was the missing terminal turn
+  for (const key of ['enemy_walk', 'enemy_fast']) {
+    const { h, u, foe } = walk(key);
+    const { first, maxLife } = flights(h, u, 12);
+    const hits = noteHits(h, u);
+    const alive = (u.mem['oblvns:notes'] ?? []).length;
+    assert.ok(hits.length >= 8, `${key}: her notes landed (${hits.length})`);
+    for (const c of hits) assert.equal(c.target, foe, `${key}: every note landed on the walking foe`);
+    assert.ok(alive <= 2, `${key}: no note is left orbiting it (${alive} in the air)`);
+    assert.equal(hits.length + alive, first.size, `${key}: every note played landed or is still in the air`);
+    assert.ok(maxLife < 5, `${key}: the longest flight is ${maxLife.toFixed(2)} s`);
+    done(h);
+  }
+  // deterministic: the same seed replays the same flights
+  const a = walk('enemy_walk'), b = walk('enemy_walk');
+  a.h.run(12);
+  b.h.run(12);
+  assert.deepEqual(noteHits(a.h, a.u).map((c) => [c.t, c.amount]), noteHits(b.h, b.u).map((c) => [c.t, c.amount]), 'the same seed replays the same flights');
+  done(a.h);
 });
 
 test('T1 颂乐音符: the notes in the air give 【Ave Mujica】 members penetration (direct add, max_cnt layers)', () => {

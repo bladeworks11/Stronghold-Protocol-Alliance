@@ -31,7 +31,7 @@ import { PLUGIN_LIMITS, PLUGIN_MANIFEST, isPluginId, checkJsonLimits, extOf } fr
 import { LOCK_FILE, LOCK_VERSION } from '../../shared/plugins/visual.js';
 import { issueList } from '../../shared/plugins/errors.js';
 import { parseSkel } from '../../tools/assets/skel.mjs';
-import { resolveRoles, inheritRoles } from '../../tools/assets/anim-roles.mjs';
+import { resolveRoles, inheritRoles, inheritBounds } from '../../tools/assets/anim-roles.mjs';
 import { atlasInfo } from '../../tools/assets/atlas.mjs';
 import { DATA_DIR } from '../data.js';
 import { gameplayDataFiles } from './identity.js';
@@ -182,16 +182,39 @@ function officialBodyRoles() {
 }
 
 /**
+ * The official bodies' model bounds (`data/assets.json`, chars[<id>].spine.front.bounds — the manifest's own), by
+ * character id, or null when the game data is not there. A skin's skeleton can be missing the setup-pose bounds its
+ * body has (信仰搅拌机's boc#12 parses to none), and the renderer sizes and lifts the model from them
+ * (public/js/render/spine.js, render/units.js), so a skin keeps the body's.
+ * @returns {Map<string, any> | null}
+ */
+let bodyBoundsCache;
+function officialBodyBounds() {
+  if (bodyBoundsCache !== undefined) return bodyBoundsCache;
+  try {
+    const json = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'assets.json'), 'utf8'));
+    const out = new Map();
+    for (const [id, c] of Object.entries(json.chars || {})) {
+      const b = c?.spine?.front?.bounds || c?.spine?.back?.bounds;
+      if (b) out.set(id, b);
+    }
+    bodyBoundsCache = out;
+  } catch { bodyBoundsCache = null; }
+  return bodyBoundsCache;
+}
+
+/**
  * One Spine model's clip data, parsed from its files in the plugin folder (see the header) — the lock's `spine` entry of
  * its skeleton — or null with the problems.
  * @param {string} dir the plugin folder
  * @param {{ skel: string, atlas: string, textures: string[] }} spine the model (shared/plugins/visual.js SpineOp)
  * @param {Set<string>} containers the containers of the entries that use it ('chars', 'enemies', 'tokens')
- * @param {{ baseAnims?: Record<string, any> | null }} [opts] baseAnims: the official body's roles when the model is a
- *   skin of that operator (inheritRoles), null to resolve the skeleton's own
+ * @param {{ baseAnims?: Record<string, any> | null, baseBounds?: Record<string, any> | null }} [opts]
+ *   baseAnims: the official body's roles when the model is a skin of that operator (inheritRoles), null to resolve the
+ *   skeleton's own; baseBounds: the body's bounds, used when the skeleton has none
  * @returns {Findings & { entry: Record<string, any> | null }}
  */
-export function skeletonClipData(dir, spine, containers, { baseAnims = null } = {}) {
+export function skeletonClipData(dir, spine, containers, { baseAnims = null, baseBounds = null } = {}) {
   const list = issueList();
   const s = spine;
   try {
@@ -210,7 +233,7 @@ export function skeletonClipData(dir, spine, containers, { baseAnims = null } = 
     const resolved = resolveRoles(sk.animations, { ...roleOptions(containers), durations: sk.durations });
     const entry = {
       sha256: sha256(bytes), anims: baseAnims ? inheritRoles(baseAnims, sk.animations, resolved) : resolved,
-      animations: sk.durations, events: sk.events, hits: sk.hits, bounds: sk.bounds,
+      animations: sk.durations, events: sk.events, hits: sk.hits, bounds: inheritBounds(sk.bounds, baseBounds),
     };
     return { entry, problems: list.problems, warnings: list.warnings, issues: list.issues };
   } catch (e) {
@@ -296,13 +319,18 @@ export function buildPluginLock(dir, { vanilla } = {}) {
       if (!operators.has(op.spine.skel) && op.at[0] === 'chars' && typeof op.at[1] === 'string') operators.set(op.spine.skel, op.at[1]);
     }
     const bodies = operators.size ? officialBodyRoles() : null;
+    const bodyBounds = operators.size ? officialBodyBounds() : null;
     for (const op of ov?.ops || []) {
       if (!op.spine || spine[op.spine.skel]) continue;
       // a skin of an operator (the skeleton of operator entries only) takes the body's roles; one also used by an
       // enemy or a token is a rig of its own, and its numbered clips are resolved from the skeleton as before
       const containers = users.get(op.spine.skel);
       const skin = containers && containers.size === 1 && containers.has('chars');
-      const c = skeletonClipData(dir, op.spine, containers, { baseAnims: skin ? bodies?.get(operators.get(op.spine.skel)) ?? null : null });
+      const owner = skin ? operators.get(op.spine.skel) : null;
+      const c = skeletonClipData(dir, op.spine, containers, {
+        baseAnims: owner ? bodies?.get(owner) ?? null : null,
+        baseBounds: owner ? bodyBounds?.get(owner) ?? null : null,
+      });
       list.take(c);
       if (c.entry) spine[op.spine.skel] = c.entry;
     }

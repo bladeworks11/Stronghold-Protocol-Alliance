@@ -406,7 +406,9 @@ A **skin** of an operator (a skeleton only operator entries use) takes the roles
 with other art, so which skill is the primary one — and which skill slots are the attack (`via: attack`) — is the
 operator's answer. Resolving a skin afresh from its clip names got that wrong (宴 fights with `Attack` on S2／S3;
 信仰搅拌机's primary skill is `Skill_3`). A clip the skin's rig lacks falls back to that rig's own resolve or is dropped;
-a skeleton an enemy or a token also uses is a rig of its own and is resolved as before. `"anims": "auto"` or nothing — never by hand; a
+a skeleton an enemy or a token also uses is a rig of its own and is resolved as before. The model's bounds are the
+skeleton's own, or the body's when it parses to none (`inheritBounds`; 信仰搅拌机's skin has none and the client sizes
+and lifts a model from them) — `"anims": "auto"` or nothing — never by hand; a
 lock made from another skeleton (its SHA-256) is a problem until it is packed again. The server never parses a skeleton
 [ASSUMED]: it rebuilds the lock's clip data in the shape the tool writes — the known roles, every clip they play an
 animation of the skeleton, at most 256 animations and 64 events, names of at most 64 characters, durations and hit

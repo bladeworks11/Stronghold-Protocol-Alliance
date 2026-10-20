@@ -372,6 +372,19 @@ export function inheritRoles(base, animationNames, fallback = null) {
 }
 
 /**
+ * The bounds a skin's lock entry keeps: its own setup-pose bounds (parseSkel), or its body's when the skin's skeleton
+ * has none. The client sizes and lifts a model from these (public/js/render/spine.js model height, render/units.js
+ * top), so a skin without them would draw at the chibi default — 信仰搅拌机's boc#12 parses to none while its body has
+ * `{ x: -345.685, y: -2.442, width: 1223.606, height: 631.382 }`.
+ * @param {{ x: number, y: number, width: number, height: number } | null} bounds the skin skeleton's own
+ * @param {{ x: number, y: number, width: number, height: number } | null} [base] the body's (data/assets.json)
+ * @returns {{ x: number, y: number, width: number, height: number } | null}
+ */
+export function inheritBounds(bounds, base = null) {
+  return bounds || base || null;
+}
+
+/**
  * All animation names referenced by a Roles object (for validation).
  * @param {Roles} roles
  * @returns {string[]}

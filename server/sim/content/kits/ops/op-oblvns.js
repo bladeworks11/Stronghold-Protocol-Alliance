@@ -74,7 +74,7 @@ import { canTargetEnemy } from '../../../targeting.js';
 import { frontOf, dirVec } from '../../../dir.js';
 import { bodyDist, bodyInRange } from '../../../body.js';
 import { hypot, sin, cos, roundHalfEven } from '../../../detmath.js';
-import { COLS } from '../../../constants.js';
+import { COLS, MOVE_SCALE } from '../../../constants.js';
 
 const S1 = 'skchr_oblvns_1';
 const S2 = 'skchr_oblvns_2';
@@ -104,6 +104,12 @@ const NOTE = Object.freeze({
   organ: Object.freeze({ upd: 0.4, minFree: 0.4, free: 0.7, seek: 1.0, track: 1.0, turn: 1 / 12, passbyR: 0, passbySpeed: 0 }),
   s3: Object.freeze({ upd: 0.4, minFree: 0.8, free: 0.8, seek: 1.0, track: 1.3, turn: 1 / 4, passbyR: 0, passbySpeed: 0 }),
 });
+/**
+ * 追踪移动's [ASSUMED] closing margin (tiles/s) over the target's own move speed: a note that homes no faster than
+ * the enemy it chases trails it for ever and never arrives (NOTE.track is 1.0–3.5 tiles/s against foes of up to
+ * 2.5 moveSpeed = 1.25 tiles/s).
+ */
+const NOTE_CHASE_MARGIN = 0.5;
 /**
  * How often a flying note's position is sent to the client as an `oblvnsNote` fx (its point, the previous one and its
  * heading). A note is a kit-managed probe — it seeks, retargets and passes through — so it is not in the snapshot's
@@ -555,12 +561,20 @@ export default {
             n.state = 'free'; n.tgt = null; n.freeAt = battle.time; n.updAt = battle.time + p.upd;
           } else {
             const ddx = t.x - n.x, ddy = t.y - n.y, d = hypot(ddx, ddy);
+            // 追踪移动 closes on its target even when the target is the faster one: a homing speed at or below the
+            // foe's own never closes (the note trails it at a fixed gap for the rest of the stage and the one-step
+            // arrival test below never sees it), so the target's move speed (moveSpeed × MOVE_SCALE tiles/s,
+            // server/sim/constants.js) is a floor under the tracking speed.
+            const step = Math.max(p.track, (t.s.moveSpeed ?? 0) * MOVE_SCALE + NOTE_CHASE_MARGIN) * dt;
             if (d > EPS) {   // 转向速度: dir ← dir × (1 − turn) + target × turn (one frame per tick)
-              const nx = n.dx * (1 - p.turn) + (ddx / d) * p.turn, ny = n.dy * (1 - p.turn) + (ddy / d) * p.turn;
+              // Inside one frame's turning circle (step / turn) the lag can only point the note around the target: it
+              // settles into a 0.1–0.75 tile orbit the one-step arrival test never catches, so a note that close turns
+              // straight onto its target instead of trailing it for ever.
+              const turn = d <= step / p.turn + EPS ? 1 : p.turn;
+              const nx = n.dx * (1 - turn) + (ddx / d) * turn, ny = n.dy * (1 - turn) + (ddy / d) * turn;
               const m = hypot(nx, ny);
               if (m > EPS) { n.dx = nx / m; n.dy = ny / m; }
             }
-            const step = p.track * dt;
             if (bodyDist(t, n.x, n.y) <= step + EPS) {   // arrived
               hitNote(battle, unit, n, t);
               if (n.passby > 0) { n.state = 'hit'; n.hitAt = battle.time; n.hits = new Set([t.id]); }
