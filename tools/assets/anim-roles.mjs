@@ -311,6 +311,66 @@ export function resolveRoles(animationNames, opts = {}) {
   return roles;
 }
 
+const CLIP_KEYS = ['begin', 'loop', 'end', 'idle'];
+
+/**
+ * The clip with every name this skeleton does not have dropped (a name it lacks is never played), null without a loop.
+ * @param {Clip | null | undefined} clip
+ * @param {(name: string) => boolean} has
+ */
+function keepClips(clip, has) {
+  if (!clip) return null;
+  const out = { ...clip };
+  for (const k of CLIP_KEYS) if (typeof out[k] === 'string' && !has(out[k])) out[k] = null;
+  return out.loop ? out : null;
+}
+
+/**
+ * The roles of the model this one replaces, kept wherever this skeleton has the clip: a skin's skeleton is its
+ * operator's rig with other art, so which Skill_N is the primary skill, and which skill slots are the attack, is the
+ * operator's answer — not a guess from clip names. Resolving a skin afresh (resolveRoles with all three slots) got
+ * both wrong: 宴 (char_337_utage) fights with `Attack` on S2/S3 (`via: 'attack'`) while the skin played Skill_Loop
+ * there, and 信仰搅拌机 (char_4194_rmixer) holds Skill_3 as its primary skill while the skin cast Skill_Loop.
+ * A clip this skeleton lacks falls back to `fallback` (resolveRoles of its own skeleton), or is dropped.
+ * @param {Roles} base the official body's roles (data/assets.json, chars[<id>].spine.front.anims)
+ * @param {string[]} animationNames this skeleton's animation names
+ * @param {Roles} [fallback] roles resolved for this skeleton, for the clips the base names but it lacks
+ * @returns {Roles}
+ */
+export function inheritRoles(base, animationNames, fallback = null) {
+  const names = new Set(Array.isArray(animationNames) ? animationNames.filter((n) => typeof n === 'string' && n.length) : []);
+  const has = (n) => typeof n === 'string' && names.has(n);
+  // a role the body has not got stays off (the skin plays what the body plays); one it has but the skin's rig cannot
+  // name falls back to the skin's own resolve for that role
+  const one = (key) => {
+    const b = base?.[key];
+    if (has(b)) return b;
+    if (!b) return null;
+    return has(fallback?.[key]) ? fallback[key] : null;
+  };
+  const clip = (key) => keepClips(base?.[key], has) ?? (base?.[key] ? keepClips(fallback?.[key], has) : null);
+  const roles = {
+    idle: one('idle'),
+    deploy: one('deploy'),
+    attack: clip('attack'),
+    attackDown: clip('attackDown'),
+    skill: clip('skill'),
+    die: one('die'),
+    move: clip('move'),
+    stun: clip('stun'),
+  };
+  const run = clip('run');
+  if (run) roles.run = run;
+  const skills = {};
+  // the body's slots only: an index it does not map is one the body plays as its primary skill, and so does the skin
+  for (const i of Object.keys(base?.skills || {}).sort((a, b) => Number(a) - Number(b))) {
+    const c = keepClips(base.skills[i], has) ?? keepClips(fallback?.skills?.[i], has);
+    if (c) skills[i] = c;
+  }
+  if (Object.keys(skills).length) roles.skills = skills;
+  return roles;
+}
+
 /**
  * All animation names referenced by a Roles object (for validation).
  * @param {Roles} roles

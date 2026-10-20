@@ -399,7 +399,14 @@ while keeping its own player's — their screen keeps showing their skin.
 skeleton itself: `node tools/plugin.mjs pack <dir>` parses it the way `tools/fetch-assets.mjs` parses the game's
 (`tools/assets/skel.mjs`, `anim-roles.mjs`: an operator's three skill slots, an enemy's numbered skills), checks the atlas
 pages against `textures`, and writes them into `plugin.lock.json` with every file's SHA-256 and size (a problem of the
-overlay — a reference the manifest lacks — leaves the lock unwritten). `"anims": "auto"` or nothing — never by hand; a
+overlay — a reference the manifest lacks — leaves the lock unwritten).
+
+A **skin** of an operator (a skeleton only operator entries use) takes the roles of that operator's own model instead
+(`anim-roles.mjs` `inheritRoles`, `chars[<id>].spine.front.anims` of `data/assets.json`): a skin rig is the same body
+with other art, so which skill is the primary one — and which skill slots are the attack (`via: attack`) — is the
+operator's answer. Resolving a skin afresh from its clip names got that wrong (宴 fights with `Attack` on S2／S3;
+信仰搅拌机's primary skill is `Skill_3`). A clip the skin's rig lacks falls back to that rig's own resolve or is dropped;
+a skeleton an enemy or a token also uses is a rig of its own and is resolved as before. `"anims": "auto"` or nothing — never by hand; a
 lock made from another skeleton (its SHA-256) is a problem until it is packed again. The server never parses a skeleton
 [ASSUMED]: it rebuilds the lock's clip data in the shape the tool writes — the known roles, every clip they play an
 animation of the skeleton, at most 256 animations and 64 events, names of at most 64 characters, durations and hit
