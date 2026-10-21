@@ -19,7 +19,7 @@ import {
 } from '../../public/js/ui/stats.js';
 import { createStore, emptyMatch } from '../../public/js/store.js';
 import { normalizeResult } from '../../public/js/ui/gameLogic.js';
-import { PHASE } from '../../shared/constants.js';
+import { PHASE, MAX_SEATS } from '../../shared/constants.js';
 
 /** A realistic m.result in the shape server/match/results.js buildResult emits (replayed byte-identically). */
 function baseResult(over = {}) {
@@ -116,6 +116,21 @@ describe('local stats: record building', () => {
     assert.equal(self.stats.bossDamage, 5000.5);
     assert.deepEqual(self.lineup, [{ id: 'char_290_vigna', golden: false, tier: 2, items: ['item_eq_1'] }]);
     assert.deepEqual(self.bonds, [{ bondId: 'steadShip', layers: 12, active: true }]);
+  });
+
+  test('an alliance match keeps every seat, not just the first six (rooms seat up to MAX_SEATS)', () => {
+    const seats = Array.from({ length: 12 }, (_, i) => ({
+      playerId: `p${i + 1}`, seat: i, name: `博士${i + 1}`, isBot: false, left: false, alive: true, victory: i === 0,
+      roundsPassed: 6, lp: 10, bandId: 'band_amiya', lineup: [], bonds: [], stats: { kills: i + 1 },
+    }));
+    const rec = buildRecord(baseResult({ players: seats }), { myId: 'p1', now: 1 });
+    assert.equal(rec.players.length, 12, 'the record read straight after the match keeps all twelve');
+    // …and so does the same record after a reload (storage normalizes it)
+    const back = normalizeRecord(JSON.parse(JSON.stringify(rec)));
+    assert.equal(back.players.length, 12);
+    assert.equal(back.players.at(-1).name, '博士12');
+    assert.equal(back.players.at(-1).stats.kills, 12);
+    assert.equal(recordToResult(back).players.length, 12, 'the settlement re-view lists every seat');
   });
 
   test('a 自选 pick and a 补位 stand-in survive in the lineup, or the replayed card would draw the plain operator', () => {
@@ -459,8 +474,8 @@ describe('local stats: bounded storage', () => {
       })),
       bigUnknown: 'y'.repeat(1e6),
     });
-    assert.ok(JSON.stringify(rec).length < 40_000, `${JSON.stringify(rec).length} chars`);
-    assert.equal(rec.players.length, 6);
+    assert.ok(JSON.stringify(rec).length < 120_000, `${JSON.stringify(rec).length} chars`);
+    assert.equal(rec.players.length, MAX_SEATS, 'every seat of an alliance match, and no more');
     assert.equal(rec.players[0].lineup.length, 12);
     assert.equal(rec.players[0].lineup[0].items.length, 4);
     assert.equal(rec.players[0].name.length, 24);
