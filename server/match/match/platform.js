@@ -35,7 +35,9 @@ export class MatchPlatform {
    * @returns {{ ok: true } | { error: string, detail?: string }}
    */
   handle(playerId, msg) {
-    const ps = this.players.get(playerId) || this.spectators.get(playerId);
+    // a spectator stand-in first: a departed seat that came back to watch is no player any more (its m.players entry
+    // stays, left, for the result — watch.js _spectator)
+    const ps = this.spectators.get(playerId) || this.players.get(playerId);
     if (!ps || ps.isBot || ps.left) return fail(ERR.NOT_IN_ROOM);
     // a spectator seat only watches (the platform routes nothing else of it)
     if (ps.spectator && (!msg || msg.t !== 'g.watch')) {

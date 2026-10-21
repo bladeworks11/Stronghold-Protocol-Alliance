@@ -133,6 +133,39 @@ test('during a battle a spectator may watch any field at once; one added mid-bat
   m.dispose();
 });
 
+test('a seat that left mid-match and comes back to watch is a spectator, not a loading screen', () => {
+  // User report 2026-10-21: 对局中的玩家退出房间后再进入房间观战，一直加载无法进入. lobby.removeMember marks the seat
+  // departed (match.onLeave) and keeps its id in m.players; room.spectate then registers a spectator seat with that same
+  // id. _spectator used to refuse any id of m.players, so addSpectator sent nothing and the browser stayed on 正在进入模拟…
+  const h = makeMatch({ mode: 'coop', humans: 2, seed: 9304, fake: true }).start();
+  const m = h.m;
+  h.toPrep(1);
+  m.onLeave('p_0');
+  assert.equal(m.players.get('p_0').left, true);
+  h.sent.length = 0;
+  m.addSpectator('p_0'); // room.spectate → lobby.callMatch(room, 'addSpectator', playerId)
+  assert.ok(m.spectators.has('p_0'), 'a departed seat may watch');
+  assert.ok(h.allTo('p_0', 'm.public').length > 0, 'the public view arrives at once');
+  const meta = h.allTo('p_0', 'm.field');
+  assert.ok(meta.length > 0 && meta[0].prep === true, 'and the board it follows, so the match screen renders');
+  assert.equal(meta[0].fieldId, 'n:p_1', 'the player still in, never its own empty seat');
+  assert.equal(h.allTo('p_0', 'm.private').length, 0, 'never a private view');
+  // it watches like any spectator seat: g.watch is taken, every other intent is refused
+  assert.equal(m.handle('p_0', { t: 'g.watch', fieldId: 'n:p_1' }).ok, true);
+  assert.equal(m.handle('p_0', { t: 'g.ready', ready: true }).error, ERR.SPECTATOR);
+  // it keeps watching through the round change: the watcher is told the round-2 prep board again, never a private view
+  const beforeRound2 = h.allTo('p_0', 'm.field').length;
+  h.run(() => m.phase === PHASE.PREP && m.round === 2, { maxSteps: 2e6 });
+  assert.ok(h.allTo('p_0', 'm.field').length > beforeRound2, 'the round-2 board is scouted to it');
+  assert.equal(h.allTo('p_0', 'm.private').length, 0);
+  // removed with the spectator seat: nothing reaches it any more
+  m.removeSpectator('p_0');
+  const before = frames(h, 'p_0').length;
+  h.run(() => m.round >= 3, { maxSteps: 2e6 });
+  assert.equal(frames(h, 'p_0').length, before, 'a removed spectator is sent nothing');
+  m.dispose();
+});
+
 test('server-run combat (SP_COMBAT=server): a spectator is streamed the first field like an eliminated player', () => {
   const h = makeMatch({ mode: 'coop', humans: 2, seed: 9303, fake: true, spectators: [S] }).start();
   const m = h.m;

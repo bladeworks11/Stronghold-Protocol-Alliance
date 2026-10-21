@@ -1762,9 +1762,12 @@ export class Lobby {
   roomOf(session) {
     if (!session.roomCode) return null;
     const room = this.rooms.get(session.roomCode);
-    const seat = room ? room.seatOf(session.playerId) : null;
-    if (room && !seat && room.spectatorOf(session.playerId)) return room; // a spectator seat
-    if (!room || !seat || seat.left || seat.isBot) { session.roomCode = null; return null; }
+    if (!room) { session.roomCode = null; return null; }
+    // a spectator seat — checked FIRST: a player who left a running match and came back to watch keeps its departed
+    // seat (left) in room.seats for the result, and that seat must not unseat the watcher (2026-10-21)
+    if (room.spectatorOf(session.playerId)) return room;
+    const seat = room.seatOf(session.playerId);
+    if (!seat || seat.left || seat.isBot) { session.roomCode = null; return null; }
     return room;
   }
 
@@ -1958,8 +1961,11 @@ export class Lobby {
   /** Match unicast. @returns {boolean} */
   sendToPlayer(room, playerId, msg) {
     if (room.disposed) return false;
-    const seat = room.seatOf(playerId) || room.spectatorOf(playerId);
-    if (!seat || seat.isBot || seat.left) return false;
+    // a spectator seat first: a player who left a running match and came back to watch keeps its departed seat (left)
+    // in room.seats for the result — its unicast must reach it (the resync of Match.addSpectator, 2026-10-21)
+    const spec = room.spectatorOf(playerId);
+    const seat = spec || room.seatOf(playerId);
+    if (!seat || seat.isBot || (!spec && seat.left)) return false;
     const session = this.registry.byId(playerId);
     if (!session || session.roomCode !== room.code) return false;
     return sendSession(session, msg);

@@ -107,7 +107,7 @@ export class MatchClientCombat {
   }
 
   _sendStart(pid, f, opts = {}) {
-    const ps = this.players.get(pid) || this.spectators.get(pid);
+    const ps = this.spectators.get(pid) || this.players.get(pid);
     if (!ps || ps.isBot || ps.left || !ps.connected) return false;
     return this.sendTo(pid, this._startMsg(f, pid, opts));
   }

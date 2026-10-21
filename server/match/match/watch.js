@@ -27,9 +27,16 @@ export class MatchWatch {
     if (this.spectators.delete(playerId)) this.watchers.delete(playerId);
   }
 
-  /** The stand-in of a spectator seat, created once (null for a player's id or a bad id). */
+  /**
+   * The stand-in of a spectator seat, created once (null for a seated player's id or a bad id). A DEPARTED seat
+   * (m.players with `left`, an earlier player of this match) may come back to watch: server/lobby.js room.spectate
+   * takes its spectator seat and calls addSpectator — before 2026-10-21 that stood for nothing, and the page waited on
+   * 正在进入模拟… forever (user report). Its players entry stays for the result; every id lookup prefers this stand-in.
+   */
   _spectator(playerId) {
-    if (typeof playerId !== 'string' || !playerId || this.players.has(playerId)) return null;
+    if (typeof playerId !== 'string' || !playerId) return null;
+    const seated = this.players.get(playerId);
+    if (seated && !seated.left) return null;
     let s = this.spectators.get(playerId);
     if (!s) {
       s = Object.freeze({ playerId, isBot: false, left: false, alive: false, connected: true, spectator: true });
@@ -156,7 +163,7 @@ export class MatchWatch {
     if (!this.fields.some((f) => f.cc)) { this._followScout(ps, { keep: true }); return; }
     const fid = this.watchers.get(ps.playerId);
     let f = fid ? this.fields.find((x) => x.fieldId === fid) : null;
-    if (!f) f = this.fields.find((x) => x.players.includes(ps.playerId)) || (this.phase === PHASE.UNITE ? this.fields[0] : null);
+    if (!f && !ps.spectator) f = this.fields.find((x) => x.players.includes(ps.playerId)) || (this.phase === PHASE.UNITE ? this.fields[0] : null);
     if (!f && !ps.alive) f = this._watchTargetField(ps, this.fields) || this.fields[0] || null;
     if (!f) return;
     this.watchers.set(ps.playerId, f.fieldId);
@@ -166,7 +173,7 @@ export class MatchWatch {
   _defaultWatch() {
     this.watchers.clear();
     for (const ps of this._viewers()) {
-      const own = this.fields.find((f) => f.players.includes(ps.playerId));
+      const own = ps.spectator ? null : this.fields.find((f) => f.players.includes(ps.playerId));
       // an eliminated human / spectator seat: the field of the player it follows (item 56), else the first
       const f = own || this._watchTargetField(ps, this.fields) || this.fields[0];
       if (!f) continue;
@@ -181,7 +188,7 @@ export class MatchWatch {
    */
   _watchBossFields(fields) {
     for (const ps of this._viewers()) {
-      const own = fields.find((f) => f.players.includes(ps.playerId)) || null;
+      const own = ps.spectator ? null : fields.find((f) => f.players.includes(ps.playerId)) || null;
       const f = own || this._watchTargetField(ps, fields) || fields[0];
       if (!f) continue;
       this.watchers.set(ps.playerId, f.fieldId);
@@ -213,7 +220,7 @@ export class MatchWatch {
     const out = new Set();
     for (const pid of f.players) out.add(pid);
     for (const [pid, fid] of this.watchers) if (fid === f.fieldId) out.add(pid);
-    return [...out].filter((pid) => { const ps = this.players.get(pid) || this.spectators.get(pid); return ps && !ps.isBot && !ps.left; });
+    return [...out].filter((pid) => { const ps = this.spectators.get(pid) || this.players.get(pid); return ps && !ps.isBot && !ps.left; });
   }
 
   watchersOf(fieldId) {

@@ -12,7 +12,8 @@ import { wireMessage } from '../../../shared/i18n.js';
 export class MatchMessaging {
   sendTo(playerId, msg) {
     if (this.disposed) return false;
-    const ps = this.players.get(playerId) || this.spectators.get(playerId);
+    // a spectator stand-in first: a departed seat that came back to watch keeps its m.players entry (left) for the result
+    const ps = this.spectators.get(playerId) || this.players.get(playerId);
     if (!ps || ps.isBot || ps.left) return false;
     try { return !!this.sendFn(playerId, msg); } catch (e) { this.reportError('send', e); return false; }
   }

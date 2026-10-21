@@ -140,6 +140,50 @@ test('co-op over websockets: two humans + AI, reconnect with the token mid-match
   assert.deepEqual(errors, []);
 });
 
+// User report 2026-10-21: 「对局中的玩家退出房间后再进入房间观战会一直加载无法进入」. The returned seat is a spectator of
+// the same running match (server/lobby.js spectate → Match.addSpectator); the match must resend it the public view and the
+// board it follows, or the client waits on 正在进入模拟… forever (test/match/spectator.test.js unit).
+test('co-op over websockets: a player who left a running match comes back and watches it, no endless loading', async () => {
+  FakeBattle.reset();
+  FakeBattle.script = () => ({ duration: 1 });
+  const a = await player('A');
+  const b = await player('B');
+  await ok(a, { t: 'room.create', mode: 'coop', difficulty: 'NORMAL' });
+  const st = await a.waitFor('room.state');
+  await ok(b, { t: 'room.join', code: st.code });
+  await ok(a, { t: 'room.addBot' });
+  await ok(b, { t: 'room.ready', ready: true });
+  await ok(a, { t: 'room.start' });
+  for (const c of [a, b]) await c.waitFor('m.public', (p) => p.phase === 'INFO_CHECK');
+  await ok(a, { t: 'g.infoReady' });
+  await ok(b, { t: 'g.infoReady' });
+  await pickCoopBands([a, b]);
+  await a.waitFor('m.public', (p) => p.phase === 'PREP' && p.round === 1, 10000);
+  // B leaves the room mid-match and takes a spectator seat of the same room
+  await ok(b, { t: 'room.leave' });
+  const mark = b.log.length;
+  await ok(b, { t: 'room.spectate', code: st.code });
+  const state = await b.waitFor('room.state', (s) => s.spectators.some((x) => x.playerId === b.id), 10000);
+  const seatOfB = state.seats.find((x) => x && x.playerId === b.id);
+  assert.ok(!seatOfB || seatOfB.connected === false, 'its player seat shows it gone — it watches');
+  // the resync: the prep board it follows, or the field it watches once a battle is up — never nothing (the browser
+  // waits on 正在进入模拟… until one of them arrives)
+  let resync = null;
+  for (const until = Date.now() + 10000; !resync && Date.now() < until;) {
+    resync = b.log.slice(mark).find((m) => m.t === 'm.field' || m.t === 'b.start') || null;
+    if (!resync) await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.ok(resync, `a resync arrives (got: ${b.log.slice(mark).map((m) => m.t).join(',')})`);
+  assert.equal(b.log.slice(mark).some((m) => m.t === 'm.private'), false, 'never a private view');
+  if (resync.t === 'm.field') assert.notEqual(resync.fieldId, `n:${b.id}`, 'not its own emptied seat');
+  // it is a spectator seat like any other: the player intents are refused
+  assert.equal((await b.request({ t: 'g.ready', ready: true })).code, 'SPECTATOR');
+  await ok(a, { t: 'g.ready', ready: true });
+  await a.waitFor('m.public', (p) => p.phase === 'PREP' && p.round === 2, 15000);
+  await ok(a, { t: 'g.leave' });
+  assert.deepEqual(errors, []);
+});
+
 // community report #26 (a remake feature): a spectator seat — server/lobby.js header, test/match/spectator.test.js
 test('co-op spectator over websockets: watches the real match like an eliminated player, never a private view, cannot act, resumes', async () => {
   FakeBattle.reset();
