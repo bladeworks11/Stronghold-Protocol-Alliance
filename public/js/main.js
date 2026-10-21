@@ -175,7 +175,11 @@ function onWelcome(msg) {
   });
   welcomeAt = Date.now();
 
-  if (prevId != null && prevId !== msg.playerId) {
+  if (msg.takeoverFrom != null && msg.takeoverFrom === prevId) {
+    // 观战者接替 AI (server/aiTakeover.js): the session token is the same one we had, only the playerId moved to the AI
+    // seat — not a server reset, and the usual resync below brings the room and the match back.
+    toast(t('你已接管AI席位，资金、阵容与分组已保留'), 'info', { ttl: 6000 });
+  } else if (prevId != null && prevId !== msg.playerId) {
     // A brand-new server session (the server restarted — crashed / killed, so no room.closed arrived — or this session
     // expired on it): whatever we showed before is gone — back to the lobby cleanly and say why.
     const notice = sessionResetNotice(prev, msg.playerId);

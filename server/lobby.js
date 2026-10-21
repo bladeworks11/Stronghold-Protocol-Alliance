@@ -167,6 +167,7 @@ import { checkLoadout, checkLoadoutOps, cultivationCharIds, checkNotOwned, check
 import { encode, isDroppable, isErrCode, sendRaw, sendSession } from './net.js';
 import { getData as defaultGetData, lookup } from './data.js';
 import { Match as DefaultMatch } from './match/Match.js';
+import { aiTakeover, resetAiTakeover } from './aiTakeover.js';
 import { KITTED_CHARS } from './sim/content/kits/index.js';
 
 const VANILLA_KITTED = new Set(KITTED_CHARS);
@@ -369,6 +370,8 @@ export class Room {
   toState() {
     return {
       t: 'room.state',
+      // 观战者接替 AI（server/aiTakeover.js）: pending requests, so the panel of every member can vote
+      aiTakeoverVotes: this.aiTakeoverVotes || [],
       code: this.code,
       hostId: this.hostId,
       mode: this.mode,
@@ -680,6 +683,9 @@ export class Lobby {
       case 'room.setDifficulty': return this.setDifficulty(session, msg);
       case 'room.setCapacity': return this.setCapacity(session, msg);
       case 'room.setAiPicksLast': return this.setAiPicksLast(session, msg);
+      // 观战者接替 AI (server/aiTakeover.js): a spectator asks for an AI seat, the teammates vote
+      case 'room.aiRequest':
+      case 'room.aiVote': return aiTakeover(this, session, msg);
       case 'room.addBot': return this.addBot(session);
       case 'room.removeBot': return this.removeBot(session, msg);
       case 'room.kick': return this.kick(session, msg);
@@ -1488,12 +1494,17 @@ export class Lobby {
       room.matchKey = key;
       room.replay = null;
       room.matchCount++;
+      // a request belongs to the preparation that is ending (server/aiTakeover.js)
+      resetAiTakeover(room);
       this.log.info(`[lobby] ${room.code} match #${room.matchCount} starting (${room.mode}/${room.difficulty}, ${seats.length} seats, seed ${seed}${room.test ? ', test' : ''}${modded ? `, content ${room.content.cs.slice(0, 8)}${match.hosted ? ' in its match host' : ''}` : ''})`);
       this.broadcastState(room);
       match.start();
     } catch (e) {
       this.log.error(`[lobby] ${room.code} match failed to start`, e);
-      if (room.matchCtx === ctx) { room.match = null; room.matchCtx = null; room.matchKey = null; }
+      if (room.matchCtx === ctx) {
+        resetAiTakeover(room);
+        room.match = null; room.matchCtx = null; room.matchKey = null;
+      }
       this.disposeMatchCtx(ctx);
       this.broadcastState(room);
       // the match hosts refuse one content set more than they run (PLUGIN_BUSY: server/match/host/index.js)
@@ -1507,6 +1518,7 @@ export class Lobby {
     if (ctx.ended || !ctx.live || room.matchCtx !== ctx || room.disposed) return;
     ctx.ended = true;
     room.lastSummary = summary ?? null;
+    resetAiTakeover(room);
     room.match = null;
     room.matchCtx = null;
     room.matchKey = null;
@@ -1860,6 +1872,7 @@ export class Lobby {
     room.disposed = true;
     if (this.rooms.get(room.code) === room) { this.trustedRuntime?.event('roomClosed',{room:room.toState()}); this.rooms.delete(room.code); }
     const ctx = room.matchCtx;
+    resetAiTakeover(room);
     room.match = null;
     room.matchCtx = null;
     room.matchKey = null;

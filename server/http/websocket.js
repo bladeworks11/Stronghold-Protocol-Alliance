@@ -64,6 +64,9 @@ export function createSessionStack(opts, { data, log, content = null, plugins = 
   const lobbyOptions = lobbyOptionsFrom(opts);
   const lobby = new Lobby({ registry, log, MatchClass: opts.MatchClass, getData: () => data, seedFn: opts.seedFn, content, plugins, hosts, options: lobbyOptions });
   const network = new Network({ registry, handler: lobby, log, options: netOptions });
+  // the lobby reaches back into the network for one thing: an AI handover re-says hello on the applicant's socket
+  // (server/aiTakeover.js transferAiSeat → `welcome` with takeoverFrom, then the ordinary resync)
+  lobby.network = network;
   return { registry, lobby, network };
 }
 

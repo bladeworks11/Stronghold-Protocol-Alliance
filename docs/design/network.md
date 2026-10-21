@@ -336,3 +336,17 @@ are entirely native and require consent [ASSUMED]; trusted classes cannot load i
 same-origin native script responses before import; all gameplay battle simulations run in Workers.
 
 Test-room admission requires `testAck:true` for both join and spectate; otherwise `TEST_CONFIRM` precedes any membership/state delivery. `g.test bond` accepts `{id,layers,count?}` (count is 0–99 extra members). All host attempts consume their per-command rate bucket, including malformed args. `[test-input ROOM]` init/call/timer JSON lines and `[test-audit ROOM]` results use the server logger. Test results have null titles and zero trophies/rewards and never enter browser records.
+
+### Spectator AI handover (PR #691, [ASSUMED])
+
+In an original-content room during PREP, a spectator may send `room.aiRequest {botId}`. `room.aiVote {voteId, approve}`
+records one replaceable vote per online, non-autoplay human teammate; a strict majority accepts or rejects, and an online
+host decides when no such teammate is present. Requests expire after 30 seconds and cannot transfer a seat during combat
+or after match disposal. `room.state.aiTakeoverVotes` exposes the applicant, AI seat, eligible IDs, yes/no votes and
+expiry, so every client renders the same tally without extra requests. A successful transfer keeps the AI player ID,
+funds, lineup, seat and inventory, bumps the seat's `_botPrepToken` so the rehearsal script stops driving it, rebinds the
+applicant's existing session token, and answers the reused socket with `welcome.takeoverFrom` followed by the ordinary
+room/match resync; pending votes are also cleared when the match starts, ends or fails to start, and when the room is
+disposed. Isolated gameplay-plugin rooms and hosted matches are unsupported, and the handover never writes resources or
+grants administrator rights. These are remake-only cooperation rules, not official combat rules; battle goldens are
+unaffected.

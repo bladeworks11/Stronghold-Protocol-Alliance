@@ -1068,3 +1068,12 @@
 @media (prefers-reduced-motion: reduce) {
   .downm__face.is-out, .downm__title { animation: none; }
 }
+
+/* 「AI 协作」(ui/aiTakeover.js): the corner entry beside the gear buttons, and the panel that opens from it. */
+.ai-participation-entry { flex: none; }
+.ai-hint { margin: 0 0 .35rem; color: var(--text-md); font-size: calc(.19 * var(--t)); line-height: 1.5; }
+.ai-requests { display: flex; flex-wrap: wrap; gap: .2rem; margin-bottom: .4rem; }
+.ai-votes { display: flex; flex-direction: column; gap: .2rem; }
+.ai-vote { display: flex; flex-wrap: wrap; gap: .2rem; align-items: center; padding: .2rem .3rem; border: 1px solid rgba(120, 200, 170, .35); background: rgba(10, 20, 18, .5); }
+.ai-vote__count { color: var(--text-md); font-size: calc(.18 * var(--t)); }
+.ai-empty { margin: .2rem 0 0; color: var(--text-md); font-size: calc(.19 * var(--t)); }
