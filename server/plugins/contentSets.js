@@ -263,6 +263,7 @@ export function createContentSets({ registry, vanillaData, log = noopLog, maxSet
     const all = typeof registry.plugins === 'function' ? registry.plugins() : [];
     const ids = all.filter((p) => p?.status === 'loaded' && p.script && p.manifest
       && Array.isArray(p.manifest.scope) && p.manifest.scope.includes('room') && (p.class === 'script' || p.class === 'trusted')).map((p) => p.id);
+    log.info?.(ids.length ? `[plugins] warming ${ids.join(', ')}` : '[plugins] no room script plugin to warm');
     let timer = null, stopped = false;
     const step = (i) => {
       if (stopped || i >= ids.length) return;
