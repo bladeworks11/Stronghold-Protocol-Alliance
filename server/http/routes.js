@@ -7,6 +7,9 @@
 //   * /api/profile/… → the account sync (server/profiles.js: one nickname = one account, no password; GET / PUT / DELETE),
 //     when the server has it (SP_PROFILES=off: none);
 //   * any method but GET / HEAD → 405 with `Allow: GET, HEAD`;
+//   * GET /sync/manifest.json → what the desktop client keeps a copy of (syncManifest.js): every served art file and
+//     plugin file with the hash of its bytes, gzipped, with a strong ETag (If-None-Match → 304) — the answer lets
+//     client/sync.js download only what a new build added or changed, so an update never needs a reinstall;
 //   * GET /healthz → JSON status (protocol `version`, release `app`, uptime, the served `build`, the vanilla content
 //     hash `content.vanilla`, the modded content sets in use `content.sets` and — only when there are some — how many
 //     unofficial plugins the server has, `content.plugins` (the title screen's count before any hello) — DESIGN §32 —,
@@ -78,13 +81,15 @@ const wantsTraffic = (query) => /(?:^|&)traffic(?:=(?:1|true|yes))?(?:&|$)/i.tes
  *             rawPath: string, query: string) => Promise<void>,
  *           health: Parameters<typeof healthReport>[0], log: object, trustProxy?: 'auto' | boolean,
  *           csp?: string | null,
+ *           sync?: { handle: (req: any, res: any) => void } | null,
  *           studio?: { handles: (rawPath: string) => boolean, handle: (req: any, res: any, rawPath: string, query: string) => Promise<void> } | null,
  *           profiles?: { handles: (rawPath: string) => boolean, handle: (req: any, res: any, rawPath: string, query: string) => Promise<void> } | null }} deps
  *   trustProxy: whose forwarding headers name the client (net.js clientAddress; the server's TRUST_PROXY); studio: the
- *   plugin studio (server/studio/index.js), or none; profiles: the account sync (server/profiles.js), or none
+ *   plugin studio (server/studio/index.js), or none; profiles: the account sync (server/profiles.js), or none; sync: the
+ *   desktop client's manifest (server/http/syncManifest.js), or none
  * @returns {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void}
  */
-export function createRequestHandler({ serveStatic, health, log, trustProxy = 'auto', studio = null, csp = null, trustedRuntime = null, profiles = null }) {
+export function createRequestHandler({ serveStatic, health, log, trustProxy = 'auto', studio = null, csp = null, trustedRuntime = null, profiles = null, sync = null }) {
   async function handleRequest(req, res) {
     const url = req.url || '/';
     if (url.length > MAX_URL_LENGTH) { sendError(req, res, 414, '请求地址过长 · URI too long'); return; }
@@ -104,6 +109,8 @@ export function createRequestHandler({ serveStatic, health, log, trustProxy = 'a
       sendJson(req, res, 200, healthReport(health, withTraffic));
       return;
     }
+    // the desktop client's copy of the art and the plugins (syncManifest.js)
+    if (sync && parts.rawPath === '/sync/manifest.json') { sync.handle(req, res); return; }
     await serveStatic(req, res, parts.rawPath, parts.query);
   }
 

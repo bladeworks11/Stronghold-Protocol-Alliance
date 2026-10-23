@@ -287,6 +287,14 @@ export function createAssetIndex({ publicDir, roots = ASSET_INDEX_ROOTS, cacheFi
     /** Files with a hash. */
     get size() { return records.size; },
     /**
+     * Every file with its content hash, by rel ('assets/…', 'fonts/…', POSIX), sorted — the sync manifest
+     * (syncManifest.js) sends them so a desktop client keeps a copy of what it has already downloaded.
+     * @returns {[string, string][]}
+     */
+    entries() {
+      return [...records].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([rel, r]) => [rel, r.hash]);
+    },
+    /**
      * The file's content hash while it still has the size and mtime it was hashed with (`stat` given), else null.
      * Without `stat`: the hash of the last build.
      * @param {string} rel @param {{ size: number, mtimeMs: number }} [stat]
@@ -306,6 +314,19 @@ export function createAssetIndex({ publicDir, roots = ASSET_INDEX_ROOTS, cacheFi
     },
     /** The hash of a model (its members' hashes hashed), null while a member is unknown. */
     modelHash: (list) => modelHashOf(list),
+    /**
+     * The models as `[hash, ...rels]` groups (a Spine skeleton, its atlas and its pages share one URL hash): the sync
+     * manifest sends them so the desktop client recognises a model's hash in a URL and answers from its own copy.
+     * @returns {string[][]}
+     */
+    modelGroups() {
+      const out = [];
+      for (const list of modelLists) {
+        const h = modelHashOf(list);
+        if (h) out.push([h, ...list.map((rel) => canonical(rel))]);
+      }
+      return out;
+    },
     /** Replace the model lists (assetViews.js, from the manifests). */
     setModels(lists) {
       modelLists = Array.isArray(lists) ? lists.filter((l) => Array.isArray(l) && l.length) : [];

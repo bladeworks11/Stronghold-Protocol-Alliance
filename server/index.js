@@ -65,6 +65,7 @@ import { createRequestHandler } from './http/routes.js';
 import { createTrafficCounter } from './http/traffic.js';
 import { createAssetIndex } from './http/assetIndex.js';
 import { createManifestViews } from './http/assetViews.js';
+import { createSyncManifest } from './http/syncManifest.js';
 import { answerClientError } from './http/common.js';
 import { lanUrls, displayHost, isProcessEntry, runMain } from './http/boot.js';
 
@@ -125,6 +126,9 @@ export async function startServer(opts = {}) {
   const indexOptions = assetIndexOptionsFrom(opts, publicDir);
   const assetIndex = indexOptions ? createAssetIndex({ publicDir, log, ...indexOptions }) : null;
   const views = createManifestViews({ dataDir, index: assetIndex, log });
+  // what the desktop client keeps a copy of (GET /sync/manifest.json, client/sync.js): the hashes of the art above and
+  // of the files the loaded plugins serve, so an update costs it only the files whose bytes changed
+  const sync = createSyncManifest({ assetIndex, registry: packs, log });
   // the visual sets of the cosmetic plugins (DESIGN §32 P1a): what a room's host switches on, served at /vs/ and /p/
   const visual = createVisualSets({ registry: packs, log });
   // the server owner's policy (plugins/config.json), the content sets of the gameplay plugins (served at /cs/<cs16>/…),
@@ -156,7 +160,7 @@ export async function startServer(opts = {}) {
   buildTag();
 
   const traffic = createTrafficCounter();
-  const server = http.createServer(createRequestHandler({ serveStatic, csp: process.env.SP_CSP === 'off' ? null : siteCsp(publicDir), health: { startedAt, network, registry, lobby, content, traffic, assetIndex, views, trusted:trustedRuntime?.health }, log, trustProxy: network.opts.trustProxy, studio, trustedRuntime, profiles }));
+  const server = http.createServer(createRequestHandler({ serveStatic, csp: process.env.SP_CSP === 'off' ? null : siteCsp(publicDir), health: { startedAt, network, registry, lobby, content, traffic, assetIndex, views, trusted:trustedRuntime?.health }, log, trustProxy: network.opts.trustProxy, studio, trustedRuntime, profiles, sync }));
   server.on('clientError', answerClientError);
   const wss = attachWebSocket(server, { network, log, traffic });
 
@@ -203,6 +207,7 @@ export async function startServer(opts = {}) {
   } catch (e) {
     network.close(); // stop heartbeat/sweep timers of the half-built server
     assetIndex?.close();
+    sync.close();
     studio?.close();
     await trustedRuntime?.close();
     throw e;
@@ -222,6 +227,7 @@ export async function startServer(opts = {}) {
       try { hosts.close(); } catch (e) { log.error('[shutdown] match hosts', e); }
       network.close();
       assetIndex?.close();
+      sync.close();
       studio?.close();
       await trustedRuntime?.close();
       await new Promise((resolve) => {
@@ -234,7 +240,7 @@ export async function startServer(opts = {}) {
     return closing;
   }
 
-  return { port: actualPort, host: boundHost, url, server, wss, lobby, network, registry, packs, content, visual, contents, hosts, traffic, assetIndex, views, studio, profiles, close };
+  return { port: actualPort, host: boundHost, url, server, wss, lobby, network, registry, packs, content, visual, contents, hosts, traffic, assetIndex, views, studio, profiles, sync, close };
 }
 
 // `node server/index.js` / npm start: listen, print the banner, stop on SIGINT / SIGTERM (http/boot.js).
