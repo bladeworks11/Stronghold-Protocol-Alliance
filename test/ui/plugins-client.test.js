@@ -22,7 +22,7 @@ import {
   pluginName, PERSONAL_PREF,
 } from '../../public/js/content.js';
 import { ERR } from '../../shared/constants.js';
-import { roomPluginFacts, nextChoice, sizeText, pluginTagText, pluginMicro, companionCosmeticHints, companionRoomCosmetics, choiceWithLooks } from '../../public/js/ui/pluginPanel.js';
+import { roomPluginFacts, nextChoice, sizeText, pluginTagText, pluginMicro, companionCosmeticHints, companionRoomCosmetics, choiceWithLooks, dependentRoomScripts, groupedRows, sharedNames } from '../../public/js/ui/pluginPanel.js';
 import { visualHashOf, writesHashOf, VISUAL_HASH_VERSION } from '../../shared/plugins/visual.js';
 import { sha256Hex } from '../../shared/sha256.js';
 
@@ -66,6 +66,43 @@ test('P9: switching a content plugin on brings its room looks with it, and switc
     'the catalogue not loaded: the same additions');
   assert.deepEqual(choiceWithLooks(['play-demo'], 'gone', true, { offered, plugins: entries }), ['play-demo', 'gone'],
     'a look the catalogue lacks adds nothing else (the switch itself is nextChoice\'s)');
+});
+
+test('P9: a pack\'s behaviour script comes with its data and goes with it — a script alone is refused', () => {
+  const pack = { id: 'pack-demo', class: 'content', version: '1.2.0', names: { zh: '演示' }, optional: { 'pack-demo-look': '1.2.0' } };
+  const look = { id: 'pack-demo-look', class: 'cosmetic', status: 'loaded', scope: ['room', 'personal'], version: '1.2.0', name: '演示' };
+  const kit = { id: 'kits-pack-demo', class: 'script', status: 'loaded', scope: ['room'], version: '1.2.0', requires: { 'pack-demo': '1.2.0' } };
+  const entries = [pack, look, kit];
+  assert.deepEqual(dependentRoomScripts(pack, entries), ['kits-pack-demo'], 'the loaded script that requires the pack');
+  assert.deepEqual(dependentRoomScripts(look, entries), [], 'a look brings no script');
+  assert.deepEqual(dependentRoomScripts(pack, [pack, { ...kit, status: 'disabled' }]), [], 'a script this server does not run');
+  assert.deepEqual(dependentRoomScripts(pack, [pack, { ...kit, scope: ['personal'] }]), [], 'a script a room cannot hold');
+  assert.deepEqual(dependentRoomScripts(pack, [pack, { ...kit, requires: { 'pack-other': '1.2.0' } }]), []);
+  assert.deepEqual(dependentRoomScripts(pack, [pack, { ...kit, requires: { 'pack-demo': '2.0.0' } }]), [], 'a version the script needs elsewhere');
+  assert.deepEqual(dependentRoomScripts({ ...pack, class: 'cosmetic' }, entries), []);
+  const offered = new Set(['pack-demo', 'pack-demo-look', 'kits-pack-demo']);
+  assert.deepEqual(choiceWithLooks([], 'pack-demo', true, { offered, plugins: entries }), ['pack-demo', 'pack-demo-look', 'kits-pack-demo'],
+    'switching the pack on brings its look and its script');
+  assert.deepEqual(choiceWithLooks(['pack-demo', 'pack-demo-look', 'kits-pack-demo'], 'pack-demo', false, { offered, plugins: entries }), [],
+    'switching it off takes all three away');
+  assert.deepEqual(choiceWithLooks(['kits-pack-demo'], 'kits-pack-demo', false, { offered, plugins: entries }), [],
+    'a script itself changes nothing else');
+  assert.deepEqual(choiceWithLooks(['pack-demo', 'kits-pack-demo'], 'kits-pack-demo', true, { offered, plugins: entries }),
+    ['pack-demo', 'kits-pack-demo'], 'a script already chosen stays where it is');
+});
+
+test('P9: the rows of one pack sit together and say which one they are', () => {
+  const pack = { id: 'pack-demo', class: 'content', names: { zh: 'Demo' }, version: '1.2.0' };
+  const look = { id: 'pack-demo-look', class: 'cosmetic', names: { zh: 'Demo' }, version: '1.2.0' };
+  const kit = { id: 'kits-pack-demo', class: 'script', names: { zh: 'Demo' }, version: '1.2.0' };
+  const solo = { id: 'zzz-solo', class: 'cosmetic', names: { zh: 'Zulu' }, version: '1.0.0' };
+  const another = { id: 'aaa-hotkeys', class: 'content', names: { zh: 'Able' }, version: '1.0.0' };
+  const nameOf = (p) => p.names.zh;
+  const rows = groupedRows([kit, look, solo, pack, another], nameOf);
+  assert.deepEqual(rows.map((p) => p.id), ['aaa-hotkeys', 'pack-demo', 'kits-pack-demo', 'pack-demo-look', 'zzz-solo'],
+    'by name, then data → script → look: the catalogue\'s id order scatters them');
+  assert.deepEqual([...sharedNames(rows, nameOf)].sort(), ['Demo'], 'only a name more than one row uses is told apart');
+  assert.deepEqual(groupedRows([], nameOf), []);
 });
 const BASE = { version: 1, chars: { char_102_texas: { avatar: '/assets/~1111111111111111/texas.png' }, char_112_siege: { avatar: '/assets/siege.png' } } };
 const fileSha = (id, rel) => sha256Hex(`${id}:${rel}`);

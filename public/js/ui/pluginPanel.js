@@ -6,11 +6,13 @@
 //     content.js loadCatalog — fetched when the panel opens, and only on a server that has plugins: content.plugins > 0),
 //     each with its
 //     switch for the host and its state for everybody else (the other players and the spectators read it; switching a
-//     content plugin on brings the room's companion looks it names — docs/PLUGINS.md, companion cosmetics — and switching it off takes
-//     them away again, so a room never runs a half-installed pair), its version,
+//     content plugin on brings the room's companion looks it names and the behaviour script that requires it (kits-*) —
+//     docs/PLUGINS.md, companion cosmetics — and switching it off takes them away again, so a room never runs a
+//     half-installed pair), its version,
 //     authors, size and a 非官方 mark; 「自动」 on one switched on because another needs it; the warnings of the room's set
 //     (two plugins change the same art — the later one applies; a plugin made for other game versions, still usable:
-//     art never changes a battle). The host's switch sends room.setPlugins with the plugins it wants (the server adds
+//     art never changes a battle). Rows of one pack (its data, its behaviour script and its look — all named the same) sit
+//     together and say which one they are. The host's switch sends room.setPlugins with the plugins it wants (the server adds
 //     what they require); during a match it is read-only. 「重新应用」 (the host, a room with plugins) sends the same
 //     choice again: when a plugin's files changed on the server since (the lobby tells the host: an m.toast), that
 //     makes the set of the files as they are now. A content plugin changes the room's gameplay (unofficial: 改变玩法, its
@@ -86,9 +88,24 @@ export function companionRoomCosmetics(plugin, plugins) {
 }
 
 /**
+ * The behaviour scripts a content plugin brings with it: the loaded room scripts of the catalogue that require `plugin`
+ * (at a version it accepts) — a pack's own server side (kits-*), which a room has to switch on together with it (the
+ * script alone is refused: its `requires` names the content pack). In the catalogue's order. [ASSUMED] docs/PLUGINS.md.
+ * @param {any} plugin the content plugin @param {any[]} plugins the catalogue's entries @returns {string[]}
+ */
+export function dependentRoomScripts(plugin, plugins) {
+  if (!['content', 'trusted'].includes(plugin?.class)) return [];
+  return (Array.isArray(plugins) ? plugins : [])
+    .filter((p) => p && ['script', 'trusted'].includes(p.class) && p.status === 'loaded'
+      && Array.isArray(p.scope) && p.scope.includes('room')
+      && Object.hasOwn(p.requires || {}, plugin.id) && appVersionMatches(p.requires[plugin.id], plugin.version))
+    .map((p) => p.id);
+}
+
+/**
  * The ids room.setPlugins sends when the host switches `id` on or off: nextChoice's, plus for a content plugin switched
- * on the companion looks it names (an already chosen look stays where it is); switched off, its looks go too — unless
- * another chosen plugin names one of them as well.
+ * on the companion looks it names and the behaviour script that requires it (an already chosen one stays where it is);
+ * switched off, they go too — unless another chosen plugin names or requires one of them as well.
  * @param {string[]} chosen the room's chosen ids (roomPluginFacts.chosen)
  * @param {string} id @param {boolean} on
  * @param {{ offered?: Set<string> | null, plugins?: any[] }} [opts] the catalogue's room plugins (nextChoice) and its entries
@@ -97,12 +114,46 @@ export function companionRoomCosmetics(plugin, plugins) {
 export function choiceWithLooks(chosen, id, on, { offered = null, plugins = [] } = {}) {
   const ids = nextChoice(chosen, id, on, offered);
   const entry = (pid) => (Array.isArray(plugins) ? plugins.find((p) => p && p.id === pid) : null);
-  const looks = companionRoomCosmetics(entry(id), plugins);
-  if (!looks.length) return ids;
-  if (on) return [...new Set([...ids, ...looks])];
-  const wanted = new Set(chosen.filter((x) => x !== id).flatMap((x) => companionRoomCosmetics(entry(x), plugins)));
-  return ids.filter((x) => !looks.includes(x) || wanted.has(x));
+  const brings = (pid) => { const p = entry(pid); return [...companionRoomCosmetics(p, plugins), ...dependentRoomScripts(p, plugins)]; };
+  const extras = brings(id);
+  if (!extras.length) return ids;
+  if (on) return [...new Set([...ids, ...extras])];
+  const wanted = new Set(chosen.filter((x) => x !== id).flatMap(brings));
+  return ids.filter((x) => !extras.includes(x) || wanted.has(x));
 }
+
+/** What a row of a same-named pack says it is (the packs come as data + behaviour script + look): msgids. */
+const KIND_NAMES = { content: N_('数据'), trusted: N_('数据'), script: N_('脚本'), cosmetic: N_('外观'), ui: N_('界面'), lang: N_('语言') };
+
+/** The msgid of a row's kind (`kindLabel`), for the badge next to a name shared by several rows. */
+export const kindLabel = (p) => (p && Object.hasOwn(KIND_NAMES, p.class) ? KIND_NAMES[p.class] : N_('插件'));
+
+const CLASS_RANK = { content: 0, trusted: 0, script: 1, cosmetic: 2, ui: 3, lang: 4 };
+
+/**
+ * Rows ordered so that the rows of one pack sit together: by display name (`nameOf`), then data → behaviour script →
+ * look, then id — the catalogue's order scatters a pack's three rows. [ASSUMED] the panel's list order.
+ * @param {any[]} rows @param {(p: any) => string} nameOf @returns {any[]}
+ */
+export function groupedRows(rows, nameOf) {
+  const rank = (p) => (p && Object.hasOwn(CLASS_RANK, p.class) ? CLASS_RANK[p.class] : 5);
+  const byName = (a, b) => String(a).localeCompare(String(b), 'zh');
+  return (Array.isArray(rows) ? [...rows] : []).sort((a, b) => {
+    const na = nameOf(a); const nb = nameOf(b);
+    if (na !== nb) return byName(na, nb) || (na < nb ? -1 : 1);
+    const ra = rank(a); const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    return String(a?.id) < String(b?.id) ? -1 : String(a?.id) > String(b?.id) ? 1 : 0;
+  });
+}
+
+/** The names more than one row of `rows` uses — those rows say their kind (groupedRows). */
+export function sharedNames(rows, nameOf) {
+  const seen = new Map();
+  for (const p of Array.isArray(rows) ? rows : []) { const n = nameOf(p); seen.set(n, (seen.get(n) || 0) + 1); }
+  return new Set([...seen].filter(([, n]) => n > 1).map(([name]) => name));
+}
+
 
 /** One warning of the room's set as a sentence (room.state.content.warnings, server/plugins/visualSet.js / roomSets.js). */
 function warningText(w, nameOf, classOf = () => 'cosmetic') {
@@ -161,7 +212,9 @@ export function PluginPanel({ open, room, myId, onClose }) {
   const offeredIds = cat.status === 'ready' ? new Set(offered.map((p) => p.id)) : null;
   // a plugin the room has that the catalogue no longer offers (removed, skipped, another scope now) still shows, by its
   // id: its switch only turns it off
-  const rows = [...offered, ...f.plugins.filter((p) => !offered.some((o) => o.id === p.id)).map((p) => ({ id: p.id, version: p.version, missing: true }))];
+  const rows = groupedRows([...offered, ...f.plugins.filter((p) => !offered.some((o) => o.id === p.id))
+    .map((p) => ({ id: p.id, version: p.version, class: p.class, missing: true }))], (p) => pluginName(p));
+  const shared = sharedNames(rows, (p) => pluginName(p));
   const nameOf = (id) => { const p = cat.plugins.find((x) => x.id === id); return p ? pluginName(p) : String(id ?? ''); };
   const classOf = (id) => cat.plugins.find((x) => x.id === id)?.class || f.plugins.find((x) => x.id === id)?.class || 'cosmetic';
   const anyContent = f.modded || offered.some((p) => ['content','script','trusted'].includes(p.class));
@@ -218,7 +271,7 @@ export function PluginPanel({ open, room, myId, onClose }) {
               disabled=${!f.editable || !!busy || (p.missing && !on) || (auto && on && !p.missing) || blocked} aria-label=${pluginName(p)}
               onClick=${() => toggle(p.id, !on)}><i></i><span>${on ? tc('toggle', '开启') : tc('toggle', '关闭')}</span></button>
             <div class="plugrow__body">
-              <div class="plugrow__name"><b>${pluginName(p)}</b>${p.version ? html`<span class="num t-dim">v${p.version}</span>` : null}
+              <div class="plugrow__name"><b>${pluginName(p)}</b>${shared.has(pluginName(p)) ? html`<span class="plugrow__kind t-dim">· ${t(kindLabel(p))}</span>` : null}${p.version ? html`<span class="num t-dim">v${p.version}</span>` : null}
                 ${auto ? html`<span class="plugrow__badge">${t('自动')}</span>` : null}
                 <span class=${cx('plugrow__badge', content && 'is-gameplay')}>${(p.execution || f.plugins.find(x => x.id === p.id)?.execution) === 'sandbox' ? t('脚本（沙箱）') : content ? t('改变玩法') : t('外观')}</span><span class="plugrow__badge is-unofficial">${t('非官方')}</span></div>
               <div class="plugrow__meta t-dim">
@@ -274,7 +327,8 @@ const CLASS_NAMES = { cosmetic: N_('外观'), content: N_('改变玩法'), scrip
 export function InstalledPlugins({ open, onClose }) {
   const cat = useStore((s) => s, Object.is, catalog);
   useEffect(() => { loadCatalog({ force: true }); }, []);
-  const plugins = unofficialPlugins(cat.plugins);
+  const plugins = groupedRows(unofficialPlugins(cat.plugins), (p) => pluginName(p));
+  const shared = sharedNames(plugins, (p) => pluginName(p));
   return html`<${Modal} open=${open} onClose=${onClose} title=${t('本服务器的插件')} micro="PLUGINS" width="6.8rem"
       actions=${html`<${Button} variant="primary" icon="check" onClick=${onClose}>${t('完成')}<//>`}>
     <div class="plugpanel" data-testid="installed-plugins">
@@ -284,7 +338,7 @@ export function InstalledPlugins({ open, onClose }) {
       <ul class="plugpanel__list">
         ${plugins.map((p) => html`<li key=${p.id} class="plugrow" data-plugin=${p.id}>
           <div class="plugrow__body">
-            <div class="plugrow__name"><b>${pluginName(p)}</b>${p.version ? html`<span class="num t-dim">v${p.version}</span>` : null}
+            <div class="plugrow__name"><b>${pluginName(p)}</b>${shared.has(pluginName(p)) ? html`<span class="plugrow__kind t-dim">· ${t(kindLabel(p))}</span>` : null}${p.version ? html`<span class="num t-dim">v${p.version}</span>` : null}
               <span class="plugrow__badge">${p.execution === 'sandbox' ? t('脚本（沙箱）') : t(CLASS_NAMES[p.class] || '插件')}</span><span class="plugrow__badge is-unofficial">${t('非官方')}</span></div>
             <div class="plugrow__meta t-dim">
               <span>${p.status === 'loaded' ? t('可以使用') : t('本版本不支持')}</span>

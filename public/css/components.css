@@ -1111,6 +1111,7 @@
 .plugrow__body { min-width: 0; display: flex; flex-direction: column; gap: .04rem; }
 .plugrow__name { display: flex; align-items: baseline; flex-wrap: wrap; gap: .08rem; font-size: calc(.16 * var(--t)); overflow-wrap: anywhere; }
 .plugrow__badge { padding: 0 .06rem; border: 1px solid var(--line-2); color: var(--text-lo); font-size: calc(.12 * var(--t)); }
+.plugrow__kind { font-size: calc(.13 * var(--t)); }
 .plugrow__badge.is-unofficial { color: #ffb066; border-color: rgba(255, 159, 67, .5); }
 .plugrow__meta { display: flex; flex-wrap: wrap; gap: .12rem; font-size: calc(.13 * var(--t)); }
 .plugrow__warn, .plugpanel__warnings li { color: #ffb066; font-size: calc(.13 * var(--t)); line-height: 1.6; }
