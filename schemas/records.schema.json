@@ -2292,73 +2292,73 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "avatarGolden": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "portrait": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "portraitGolden": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "spine": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "spineGolden": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "voice": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "voiceGolden": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "skillIcon": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "skillIconGolden": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "subProfIcon": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     },
                     "subProfIconGolden": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128,
-                      "pattern": "^[A-Za-z0-9_-]+$"
+                      "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                     }
                   }
                 }
@@ -5076,73 +5076,73 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "avatarGolden": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "portrait": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "portraitGolden": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "spine": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "spineGolden": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "voice": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "voiceGolden": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "skillIcon": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "skillIconGolden": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "subProfIcon": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       },
                       "subProfIconGolden": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9_-]+$"
+                        "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                       }
                     }
                   }
@@ -7874,73 +7874,73 @@
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "avatarGolden": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "portrait": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "portraitGolden": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "spine": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "spineGolden": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "voice": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "voiceGolden": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "skillIcon": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "skillIconGolden": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "subProfIcon": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           },
                           "subProfIconGolden": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 128,
-                            "pattern": "^[A-Za-z0-9_-]+$"
+                            "pattern": "^[A-Za-z0-9_\\[\\]-]+$"
                           }
                         }
                       }

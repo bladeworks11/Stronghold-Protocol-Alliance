@@ -2029,9 +2029,11 @@ Optional operator fields preserve old plugins unchanged:
   bond visible members and DIY owned selection. [ASSUMED] For `as: "both"`, hiding also excludes the DIY pick.
 - `chess.ids: { normal, elite }`: distinct `chess_x_<plugin_namespace>_…` IDs; do not also set legacy `chess.id`.
   Pair references and `upgradeChessId` use these IDs directly; suffixes are not required.
-- `art.ref`: default installed character art and voice bank. The id matches `^[A-Za-z0-9_-]+$`, the same
-  pattern as each `art.assets` id; a path or a URL is `PLUGIN_RECORD_ART`. `art.assets` overrides exact manifest IDs:
+- `art.ref`: default installed character art and voice bank. The id matches `^[A-Za-z0-9_-]+$`; a path or a URL is
+  `PLUGIN_RECORD_ART`. `art.assets` overrides exact manifest IDs:
   `avatar`, `portrait`, `spine`, `voice`, `skillIcon`, `subProfIcon`, each optionally suffixed `Golden`.
+  Those IDs also accept the level bracket official skill art is addressed with (`skcom_atk_up[2]`,
+  `skchr_yuki_2[3]`): the bracket is part of the ID and is kept as written, not read as a path.
   These are IDs, never file paths or URLs. Golden model/voice/icon defaults to the normal value
   (character entries have no E2 model or voice field). Avatar/portrait keep the `art.ref` id unless a Golden
   value is supplied; when that id is a character-manifest key, a golden piece uses `avatarE2` / `portraitE2`

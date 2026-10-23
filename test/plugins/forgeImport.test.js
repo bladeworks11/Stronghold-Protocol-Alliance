@@ -1369,6 +1369,29 @@ test('hidden pieces preserve explicit pair, source and both forms of art without
   } finally { fs.rmSync(parent, { recursive: true, force: true }); }
 });
 
+test('an official art id keeps its level bracket (skcom_atk_up[2]) through import and the content set', async () => {
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-forge-bracket-'));
+  try {
+    const pack = path.join(parent, 'pack');
+    const source = Object.values(pairOf('bracket'));
+    // official skill art is addressed as an id plus its level: skcom_* and skchr_*[n] (0.3.x data)
+    const chess = Object.fromEntries(source.map((r, i) => [`chess_bracket_${i}`, { ...r,
+      chessId: `chess_bracket_${i}`, baseId: 'chess_bracket_0', goldenId: 'chess_bracket_1',
+      assets: { avatar: 'char_102_texas', skillIcon: 'skcom_atk_up[2]', subProfIcon: 'sub_fastshot_icon[1]' },
+    }]));
+    writePack(pack, { id: 'bracket', name: 'Bracket', version: '1.0.0', license: 'CC0-1.0', content: ['chess'] }, { 'chess.json': JSON.stringify(chess) });
+    const got = await importForge(pack, { ...forgeOpts(parent), out: path.join(parent, 'bracket') });
+    assert.equal(got.ok, true, got.markdown);
+    const [op] = opsOf(path.join(parent, 'bracket'));
+    assert.equal(op.art.assets.skillIcon, 'skcom_atk_up[2]');
+    assert.equal(op.art.assets.subProfIcon, 'sub_fastshot_icon[1]');
+    const { registry } = setsOf(parent);
+    const set = buildContentSet({ registry, ids: ['bracket'] });
+    assert.deepEqual(set.problems, []);
+    assert.equal(set.data.chess[op.chess.ids.normal].assets.skillIcon, 'skcom_atk_up[2]');
+  } finally { fs.rmSync(parent, { recursive: true, force: true }); }
+});
+
 test('a Forge built-in language imports as a global lang overlay, separate from room content', async () => {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-forge-overlay-'));
   try {

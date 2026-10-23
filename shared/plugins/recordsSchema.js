@@ -2,11 +2,14 @@
 import { GRID_SCHEMA, MODS_SCHEMA, SKILL_SPEC_SCHEMA } from './skillSpec.js';
 const str = { type: 'string', minLength: 1 }, obj = { type: 'object' };
 const ids = { type: 'array', items: str };
+// A record id: letters, digits, `_` and `-`. Official asset ids add the skill level in brackets
+// (`skcom_atk_up[2]`), so art.assets uses its own pattern; art.ref stays a character id.
 const assetId = { ...str, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' };
+const artAssetId = { ...str, maxLength: 128, pattern: '^[A-Za-z0-9_\\[\\]-]+$' };
 export const OPERATOR_ART_SCHEMA = { type: 'object', minProperties: 1, additionalProperties: false,
   // art.ref is an installed character id, the same pattern as art.assets: never a path or a URL.
   properties: { ref: assetId, assets: { type: 'object', minProperties: 1, additionalProperties: false,
-    properties: Object.fromEntries(['avatar', 'portrait', 'spine', 'voice', 'skillIcon', 'subProfIcon'].flatMap(k => [[k, assetId], [`${k}Golden`, assetId]])) } } };
+    properties: Object.fromEntries(['avatar', 'portrait', 'spine', 'voice', 'skillIcon', 'subProfIcon'].flatMap(k => [[k, artAssetId], [`${k}Golden`, artAssetId]])) } } };
 export const OPERATOR_ORIGIN_SCHEMA = { type: 'object', minProperties: 1, additionalProperties: false, properties: { chessId: assetId, charId: assetId } };
 const form = { type: 'object', required: ['stats', 'rangeGrid'], properties: { stats: obj, rangeGrid: GRID_SCHEMA, skills: { type: 'array' } }, additionalProperties: true };
 export const RECORD_SCHEMA = {
