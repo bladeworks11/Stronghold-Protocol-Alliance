@@ -214,6 +214,10 @@ export async function startServer(opts = {}) {
   }
   server.on('error', (e) => log.error('[http] server error', e));
   assetIndex?.start();
+  // The first room to switch a script pack on pays its sandbox preflight (~1 s) while its players wait: build those
+  // sets once, in the background (plugins/contentSets.js `warm`). Only the real server does it — a test's server starts
+  // and stops within seconds, where a 2 s timer would just race the test.
+  const stopWarm = isProcessEntry(import.meta.url) ? contents.warm() : () => {};
 
   const addr = server.address();
   const actualPort = typeof addr === 'object' && addr ? addr.port : port;
@@ -223,6 +227,7 @@ export async function startServer(opts = {}) {
   async function close() {
     if (closing) return closing;
     closing = (async () => {
+      stopWarm();
       try { lobby.shutdown('shutdown'); } catch (e) { log.error('[shutdown] lobby', e); }
       try { hosts.close(); } catch (e) { log.error('[shutdown] match hosts', e); }
       network.close();

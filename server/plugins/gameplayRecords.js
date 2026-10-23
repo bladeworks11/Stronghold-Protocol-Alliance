@@ -20,24 +20,34 @@ export function expandGameplayRecords(data, records, opts) {
   const problems = jsonProblems(records, 'records');
   if (problems.length) return { data, problems };
   let out = clone(data);
-  for (const r of records) {
-    if (r?.file !== 'bonds' && !(r?.file === 'items' && !r.base && !r.set?.effectRef && !r.value?.effectRef)) {
-      const expanded = expandRecords(out, [r], opts);
-      problems.push(...expanded.problems); out = expanded.data;
-      if (!expanded.problems.length && formExtras(r)) {
-        for (const which of ['normal', 'elite']) for (const field of ['tags', 'tokens']) {
-          const value = r.forms[which][field];
-          if (value === undefined) continue;
-          if (!Array.isArray(value) || value.length > 64 || value.some(id => typeof id !== 'string' || field === 'tokens' && !out.tokens[id])) {
-            problems.push(problem('PLUGIN_DATA_REFERENCE', `forms.${which}.${field}`, 'bounded string list with existing token ids required')); continue;
-          }
-          for (const c of Object.values(out.chess)) if (c.charId === r.charId && c.isGolden === (which === 'elite')) c[field] = clone(value);
-          // DIY forms can use several economy statuses. Match the normal/elite form by equipLevel.
-          for (const f of Object.values(out.backups?.units?.[r.charId]?.forms ?? {})) if ((f.status.equipLevel > 0) === (which === 'elite')) f[field] = clone(value);
-        }
+  // A run of ordinary records is expanded in one call: expandRecords clones the 9 MB data (~80 ms) per call, so a file
+  // of 20 records that each took its own call spent 1.6 s here. A record's `forms` extras are applied once its own run
+  // is expanded, in declared order, before anything after the run reads `out`.
+  let batch = [];
+  const extras = (r) => {
+    for (const which of ['normal', 'elite']) for (const field of ['tags', 'tokens']) {
+      const value = r.forms[which][field];
+      if (value === undefined) continue;
+      if (!Array.isArray(value) || value.length > 64 || value.some(id => typeof id !== 'string' || field === 'tokens' && !out.tokens[id])) {
+        problems.push(problem('PLUGIN_DATA_REFERENCE', `forms.${which}.${field}`, 'bounded string list with existing token ids required')); continue;
       }
-      continue;
+      for (const c of Object.values(out.chess)) if (c.charId === r.charId && c.isGolden === (which === 'elite')) c[field] = clone(value);
+      // DIY forms can use several economy statuses. Match the normal/elite form by equipLevel.
+      for (const f of Object.values(out.backups?.units?.[r.charId]?.forms ?? {})) if ((f.status.equipLevel > 0) === (which === 'elite')) f[field] = clone(value);
     }
+  };
+  const flush = () => {
+    if (!batch.length) return;
+    const run = batch; batch = [];
+    const expanded = expandRecords(out, run, opts);
+    problems.push(...expanded.problems);
+    out = expanded.data;
+    if (expanded.problems.length) return;
+    for (const r of run) if (formExtras(r)) extras(r);
+  };
+  for (const r of records) {
+    if (r?.file !== 'bonds' && !(r?.file === 'items' && !r.base && !r.set?.effectRef && !r.value?.effectRef)) { batch.push(r); continue; }
+    flush();
     const bad = (message, code = 'PLUGIN_RECORD_TYPE') => problems.push(problem(code, `${r.file}.${r.id}`, message));
     if (!recordId(r.id, opts.pluginId, GAMEPLAY_RECORDS[r.file])) { bad('record outside plugin namespace', 'PLUGIN_RECORD_ID'); continue; }
     if (Object.hasOwn(out[r.file], r.id)) { bad('record already exists', 'PLUGIN_RECORD_EXISTS'); continue; }
@@ -69,6 +79,7 @@ export function expandGameplayRecords(data, records, opts) {
       out.items[r.id] = { ...v, id: r.id };
     }
   }
+  flush();
   return { data: problems.length ? data : out, problems };
 }
 

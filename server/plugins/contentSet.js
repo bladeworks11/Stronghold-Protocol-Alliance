@@ -25,6 +25,21 @@ import { composeRules } from '../../shared/plugins/rules.js';
 import { offerReferenceProblems } from './offerData.js';
 
 const bases = new WeakMap(), buffers = new WeakMap(), caches = new WeakMap();
+/** Per server: each vanilla table's and translation file's canonical text and hash — an unchanged table keeps them. */
+const tableTexts = new WeakMap();
+function vanillaTexts(base) {
+  let seen = tableTexts.get(base);
+  if (seen) return seen;
+  seen = { data: new Map(), i18n: new Map() };
+  for (const [name, rec] of Object.entries(base.data)) {
+    const body = base.files.get(`data/${name}.json`);
+    // A table the vanilla files serve no bytes for cannot be reused: compare it by text and hash what is written.
+    seen.data.set(name, { json: canonicalJson(rec), sha: body ? nodeSha256(body) : null });
+  }
+  for (const [lang, doc] of Object.entries(base.i18n)) seen.i18n.set(lang, canonicalJson(doc));
+  tableTexts.set(base, seen);
+  return seen;
+}
 function baseFor(registry) {
   if (bases.has(registry)) return bases.get(registry);
   const dirs = registry.contentDirs ?? {};
@@ -307,13 +322,17 @@ function composeContentSet({ registry, ids = [], checkDataOnly = false }) {
   // Checking declarative references must never execute a dependency's script setup/preflight.
   if (checkDataOnly) return { data, problems: [] };
   const bodies = new Map(base.files), files = {}, hashes = {};
+  const texts = vanillaTexts(base);
   for (const [name, rec] of Object.entries(data)) {
     const rel = `data/${name}.json`;
-    // A new table (data/dsl.json) has no base bytes. canonicalJson(undefined) throws, so a missing key is always written.
-    if (!Object.hasOwn(base.data, name) || canonicalJson(rec) !== canonicalJson(base.data[name])) bodies.set(rel, Buffer.from(JSON.stringify(rec)));
-    const body = bodies.get(rel); hashes[name] = nodeSha256(body);
+    const vanilla = texts.data.get(name);
+    // A table whose text is the vanilla text keeps the vanilla bytes and their hash; a new table (data/dsl.json) has no
+    // base bytes at all (canonicalJson(undefined) throws), so it is always written.
+    if (vanilla?.sha && canonicalJson(rec) === vanilla.json) { hashes[name] = vanilla.sha; continue; }
+    bodies.set(rel, Buffer.from(JSON.stringify(rec)));
+    hashes[name] = nodeSha256(bodies.get(rel));
   }
-  for (const [lang, doc] of Object.entries(tr.out)) if (canonicalJson(doc) !== canonicalJson(base.i18n[lang] ?? null)) bodies.set(`i18n/${lang}.json`, Buffer.from(JSON.stringify(doc)));
+  for (const [lang, doc] of Object.entries(tr.out)) if (canonicalJson(doc) !== (texts.i18n.get(lang) ?? 'null')) bodies.set(`i18n/${lang}.json`, Buffer.from(JSON.stringify(doc)));
   const boundsSnap = exportOfficialBounds(rememberOfficialBounds(base.data));
   if (plugins.length) bodies.set('bounds/official.json', Buffer.from(canonicalJson(boundsSnap)));
   // Notices and personal theme values are not gameplay. Use the same canonical snapshot whether those fields

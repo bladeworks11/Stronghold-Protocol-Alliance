@@ -251,8 +251,36 @@ export function createContentSets({ registry, vanillaData, log = noopLog, maxSet
 
   const byCs = (cs) => { const s = isContentHash(cs) ? sets.get(csUrlPart(cs)) : null; return s && s.cs === cs ? s : null; };
 
+  /**
+   * Build the set of every loaded room script plugin once, in the background, so a room that switches one on later does
+   * not pay its sandbox preflight (server/plugins/scriptPreflight.js: one child process per script, ~1 s) while its
+   * players wait. Only the preflight's cache matters here; the sets themselves stay memoized and are dropped unheld.
+   * One set at a time, `gap` apart and first after `delay`: a build is synchronous, so a boot-time burst would stall the
+   * rooms opened meanwhile. Returns a stop function (server shutdown).
+   * @param {{ delay?: number, gap?: number }} [opts]
+   */
+  function warm({ delay = 2000, gap = 250 } = {}) {
+    const all = typeof registry.plugins === 'function' ? registry.plugins() : [];
+    const ids = all.filter((p) => p?.status === 'loaded' && p.script && p.manifest
+      && Array.isArray(p.manifest.scope) && p.manifest.scope.includes('room') && (p.class === 'script' || p.class === 'trusted')).map((p) => p.id);
+    let timer = null, stopped = false;
+    const step = (i) => {
+      if (stopped || i >= ids.length) return;
+      const id = ids[i], t0 = performance.now();
+      try {
+        const r = resolve([id]);
+        if (r.ok) log.info?.(`[plugins] warmed ${id} in ${Math.round(performance.now() - t0)} ms`);
+        else log.info?.(`[plugins] ${id} not warmed: ${r.error} ${r.detail}`);
+      } catch (e) { log.warn?.(`[plugins] warming ${id} failed: ${e?.message || e}`); }
+      timer = setTimeout(() => step(i + 1), gap); timer?.unref?.();
+    };
+    timer = setTimeout(() => step(0), delay); timer?.unref?.();
+    return () => { stopped = true; if (timer) clearTimeout(timer); };
+  }
+
   return {
     resolve,
+    warm,
     onStale(fn) { staleListeners.add(fn); return () => staleListeners.delete(fn); },
     close() { offScan?.(); staleListeners.clear(); },
     /** A room uses the set of `cs`: never dropped until every holder released it. @param {string} cs */
