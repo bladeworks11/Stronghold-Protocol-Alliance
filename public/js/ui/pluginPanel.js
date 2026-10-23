@@ -5,7 +5,9 @@
 //   * PluginPanel — the cosmetic and (P1c, DESIGN §32.6) content plugins this server has for rooms (the catalogue:
 //     content.js loadCatalog — fetched when the panel opens, and only on a server that has plugins: content.plugins > 0),
 //     each with its
-//     switch for the host and its state for everybody else (the other players and the spectators read it), its version,
+//     switch for the host and its state for everybody else (the other players and the spectators read it; switching a
+//     content plugin on brings the room's companion looks it names — docs/PLUGINS.md, companion cosmetics — and switching it off takes
+//     them away again, so a room never runs a half-installed pair), its version,
 //     authors, size and a 非官方 mark; 「自动」 on one switched on because another needs it; the warnings of the room's set
 //     (two plugins change the same art — the later one applies; a plugin made for other game versions, still usable:
 //     art never changes a battle). The host's switch sends room.setPlugins with the plugins it wants (the server adds
@@ -66,6 +68,40 @@ export function companionCosmeticHints(plugin, plugins, active) {
   return cosmeticPlugins(plugins, 'personal').filter(p => !active.has(p.id)
     && Object.hasOwn(plugin.optional || {}, p.id) && appVersionMatches(plugin.optional[p.id], p.version))
     .map(p => t('外观在『{name}』（设置 → 外观插件）', { name: pluginName(p) }));
+}
+
+/**
+ * The companion looks a room switches on with a content plugin: the cosmetics `plugin` names in `optional` that a room
+ * may hold (loaded, scope `room` — a personal-only companion stays this player's choice, said by a hint instead), in the
+ * catalogue's order and at a version it accepts. [ASSUMED] docs/PLUGINS.md, companion cosmetics.
+ * @param {any} plugin the content plugin (`optional`: cosmetic id → version range)
+ * @param {any[]} plugins the catalogue's entries
+ * @returns {string[]}
+ */
+export function companionRoomCosmetics(plugin, plugins) {
+  if (!['content', 'script', 'trusted'].includes(plugin?.class)) return [];
+  return cosmeticPlugins(plugins, 'room').filter(p => Object.hasOwn(plugin.optional || {}, p.id)
+    && appVersionMatches(plugin.optional[p.id], p.version))
+    .map(p => p.id);
+}
+
+/**
+ * The ids room.setPlugins sends when the host switches `id` on or off: nextChoice's, plus for a content plugin switched
+ * on the companion looks it names (an already chosen look stays where it is); switched off, its looks go too — unless
+ * another chosen plugin names one of them as well.
+ * @param {string[]} chosen the room's chosen ids (roomPluginFacts.chosen)
+ * @param {string} id @param {boolean} on
+ * @param {{ offered?: Set<string> | null, plugins?: any[] }} [opts] the catalogue's room plugins (nextChoice) and its entries
+ * @returns {string[]}
+ */
+export function choiceWithLooks(chosen, id, on, { offered = null, plugins = [] } = {}) {
+  const ids = nextChoice(chosen, id, on, offered);
+  const entry = (pid) => (Array.isArray(plugins) ? plugins.find((p) => p && p.id === pid) : null);
+  const looks = companionRoomCosmetics(entry(id), plugins);
+  if (!looks.length) return ids;
+  if (on) return [...new Set([...ids, ...looks])];
+  const wanted = new Set(chosen.filter((x) => x !== id).flatMap((x) => companionRoomCosmetics(entry(x), plugins)));
+  return ids.filter((x) => !looks.includes(x) || wanted.has(x));
 }
 
 /** One warning of the room's set as a sentence (room.state.content.warnings, server/plugins/visualSet.js / roomSets.js). */
@@ -141,7 +177,7 @@ export function PluginPanel({ open, room, myId, onClose }) {
       if (alive.current) setBusy(null);
     }
   };
-  const toggle = (id, on) => send(nextChoice(f.chosen, id, on, offeredIds), id);
+  const toggle = (id, on) => send(choiceWithLooks(f.chosen, id, on, { offered: offeredIds, plugins: cat.plugins }), id);
   // the room's mode (room.setMode, DESIGN §32.6)
   const pickMode = async (modeId) => {
     if (inFlight.current || !f.editable) return;

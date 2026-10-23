@@ -2189,10 +2189,13 @@ An unsupported `pack.json.assets` engine resource container (`.spresources`) set
 means the import/check completed successfully; it does not mean the engine container was converted.
 
 [ASSUMED] When one import produces content and a cosmetic companion, the content manifest records the cosmetic id
-and exact version in the existing `optional` map. This is a hint and load-order metadata; it never enables a personal
-cosmetic. The room's plugin panel names installed, version-matching personal cosmetic companions of active gameplay
-plugins while they are off in both the room and this player's personal selection (including automatic dependencies):
-「外观在『…』（设置 → 外观插件）」. Missing or incompatible companion versions produce no hint.
+and exact version in the existing `optional` map. For a companion a room may hold (`scope` includes `room`, loaded, and
+at a version the content plugin accepts) the room's plugin panel keeps the pair together: switching the content plugin
+on switches its companions on too, and switching it off takes them away again unless another chosen plugin names the
+same one. For a personal-only companion the panel only names it — installed, version-matching, and off in both the room
+and this player's personal selection (including automatic dependencies): 「外观在『…』（设置 → 外观插件）」, and the
+player's own switch stays the only one that enables it. Missing or incompatible companion versions produce neither a
+switch nor a hint.
 
 Folder/CLI checks and the registry count embedded record `kit.dsl` as a `dsl` permission use, alongside operator
 trait DSL and its official-record `data.patch` use (§34.26). Studio refuses a stale autofix that would remove one

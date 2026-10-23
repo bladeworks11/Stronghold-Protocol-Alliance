@@ -22,7 +22,7 @@ import {
   pluginName, PERSONAL_PREF,
 } from '../../public/js/content.js';
 import { ERR } from '../../shared/constants.js';
-import { roomPluginFacts, nextChoice, sizeText, pluginTagText, pluginMicro, companionCosmeticHints } from '../../public/js/ui/pluginPanel.js';
+import { roomPluginFacts, nextChoice, sizeText, pluginTagText, pluginMicro, companionCosmeticHints, companionRoomCosmetics, choiceWithLooks } from '../../public/js/ui/pluginPanel.js';
 import { visualHashOf, writesHashOf, VISUAL_HASH_VERSION } from '../../shared/plugins/visual.js';
 import { sha256Hex } from '../../shared/sha256.js';
 
@@ -41,6 +41,31 @@ test('P9: active content names installed companion art only while it is off for 
   assert.deepEqual(companionCosmeticHints({ ...play, class: 'cosmetic' }, entries, new Set()), []);
   assert.deepEqual(companionCosmeticHints(play, [play, { ...look, version: '2.0.0' }], new Set()), []);
   assert.deepEqual(personal.get().ids, [], 'the hint never changes personal switches');
+});
+
+test('P9: switching a content plugin on brings its room looks with it, and switching it off takes them away', () => {
+  const play = { id: 'play-demo', class: 'content', optional: { 'look-demo': '1.0.0', 'private-look': '1.0.0', gone: '*' } };
+  const look = { id: 'look-demo', class: 'cosmetic', status: 'loaded', scope: ['personal', 'room'], version: '1.0.0' };
+  const privateOnly = { id: 'private-look', class: 'cosmetic', status: 'loaded', scope: ['personal'], version: '1.0.0' };
+  const entries = [play, look, privateOnly];
+  assert.deepEqual(companionRoomCosmetics(play, entries), ['look-demo'], 'only a look a room may hold: a personal-only one stays a hint');
+  assert.deepEqual(companionRoomCosmetics({ ...play, class: 'cosmetic' }, entries), []);
+  assert.deepEqual(companionRoomCosmetics(play, [play, { ...look, status: 'blocked' }]), []);
+  assert.deepEqual(companionRoomCosmetics(play, [play, { ...look, version: '2.0.0' }]), [], 'a version the content plugin does not accept');
+  assert.deepEqual(companionRoomCosmetics({ ...play, optional: undefined }, entries), []);
+  const offered = new Set(entries.map((p) => p.id));
+  assert.deepEqual(choiceWithLooks([], 'play-demo', true, { offered, plugins: entries }), ['play-demo', 'look-demo']);
+  assert.deepEqual(choiceWithLooks(['play-demo', 'look-demo'], 'play-demo', false, { offered, plugins: entries }), [],
+    'turned off, the look goes with it');
+  const other = { id: 'play-other', class: 'content', optional: { 'look-demo': '*' } };
+  const both = [play, other, look];
+  assert.deepEqual(choiceWithLooks(['play-demo', 'play-other', 'look-demo'], 'play-demo', false, { offered: new Set(both.map((p) => p.id)), plugins: both }),
+    ['play-other', 'look-demo'], 'a look another chosen plugin names as well stays');
+  assert.deepEqual(choiceWithLooks(['look-demo'], 'look-demo', false, { offered, plugins: entries }), [], 'a look itself changes nothing else');
+  assert.deepEqual(choiceWithLooks([], 'play-demo', true, { offered: null, plugins: entries }), ['play-demo', 'look-demo'],
+    'the catalogue not loaded: the same additions');
+  assert.deepEqual(choiceWithLooks(['play-demo'], 'gone', true, { offered, plugins: entries }), ['play-demo', 'gone'],
+    'a look the catalogue lacks adds nothing else (the switch itself is nextChoice\'s)');
 });
 const BASE = { version: 1, chars: { char_102_texas: { avatar: '/assets/~1111111111111111/texas.png' }, char_112_siege: { avatar: '/assets/siege.png' } } };
 const fileSha = (id, rel) => sha256Hex(`${id}:${rel}`);
