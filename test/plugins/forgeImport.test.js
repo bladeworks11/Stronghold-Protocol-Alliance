@@ -1848,7 +1848,7 @@ test('P9: an engine resource container reports partial/manual even with no produ
   assert.ok(got.report.manualReasons.some(r => r.path === 'pack.json:assets' && /spresources/.test(r.en)));
 });
 
-test('a pack that drops whole gameplay records says so, and a cosmetic aimed only at those records has nothing to apply to', async () => {
+test('a pack that drops whole gameplay records says so, keeps trait text as display-only, and a cosmetic aimed only at those records has nothing to apply to', async () => {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-forge-gap-'));
   const pack = path.join(parent, 'pack');
   const droppedTables = {
@@ -1910,14 +1910,16 @@ test('a pack that drops whole gameplay records says so, and a cosmetic aimed onl
     assert.equal(got.ok, true, got.markdown);
     assert.equal(got.report.needsManualAdaptation, false);
     assert.equal(got.report.partial, true);
+    // Traits are not dropped any more: a garrison this engine has no handler for is kept as display-only text.
     assert.deepEqual(got.report.dropped, {
-      operators: 1, bonds: 1, bands: 1, items: 1, tokens: 1, traits: 3, kits: 1, panels: 0,
+      operators: 1, bonds: 1, bands: 1, items: 1, tokens: 1, traits: 0, kits: 1, panels: 0,
     });
     const play = got.markdown.indexOf('## 没有导入的玩法');
     const importedAt = got.markdown.indexOf('## 导入了什么');
     assert.ok(play >= 0 && play < importedAt, got.markdown.slice(0, 800));
     assert.match(got.markdown, /1 干员 \/ 棋子/);
-    assert.match(got.markdown, /3 特性/);
+    assert.match(got.markdown, /驻守效果/);
+    assert.match(got.markdown, /说明文字/);
     assert.equal(got.report.cosmeticBare, true);
     assert.match(got.markdown, /nothing to apply to/);
     const look = got.report.products.find((p) => p.class === 'cosmetic');

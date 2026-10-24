@@ -764,7 +764,10 @@ Supported files: enemies, waves, stages, modes, items, bands, garrisons, effects
 - Bands and inherited items require an official `base` or `value.effectRef`; the result retains `effectRef` and the concrete
   record's copied/overridden buffs. Battle item identity checks and prep dispatch recognize it. A compact item is a
   single non-merging record [ASSUMED]; paired equipment uses the complete records described below.
-- Garrisons reuse an existing `effectKey`; effects reuse existing buff handlers. Choices use
+- Garrisons reuse an existing `effectKey`; effects reuse existing buff handlers. A garrison whose `effectKey` this engine
+  has no handler for is kept as display-only data (`displayOnly: true` [ASSUMED]): the operator card shows the trait text
+  the pack wrote, battle installs nothing for it, and the import report names the missing behaviour. Dropping the record
+  instead made whole plugin rosters look like they had no traits. Choices use
   `{ file: "choices", id: "effect_x_data_demo_card", kind: "tactic" | "bounty", base: <card effectId>, set?, effect? }`:
   the new card and its cloned effect are added together. New bond behavior uses prep DSL, member DSL talents (§12), or a script plugin (§13).
 - Bonds use `{ file: "bonds", id: "bond_x_<namespace>_<local>", value: { name, desc, thresholds,
@@ -773,7 +776,12 @@ Supported files: enemies, waves, stages, modes, items, bands, garrisons, effects
   (elite pieces, including duplicates). Members come from chess `bonds`, including patches to official pieces;
   composition rebuilds `members` and `visibleMembers`. Defaults [ASSUMED]: extra/REGULAR, order and identifier 10000, icon by id; `isCore: true` defaults to SEASON. Layers use the existing persistent state and caps. Strip,
   popup, shop and bots read the same records. Icons use cosmetic `art.bonds[<bondId>]`.
-  No behavior follows from a name or description [ASSUMED]: prep `dsl` files can guard funds/layers/gainItem with
+  The bond's blackboard `env_gbuff_new` does apply through the shared plugin-bond part
+  (`server/sim/content/bonds/plugin.js`): `power_bond_char_cnt` picks the count tier and the `base_*` / `*_per_stack`
+  stat fields (attack, defence, max HP percentages, attack speed, damage dealt/taken multipliers) become passive buffs
+  that scale with layers [ASSUMED]. Behaviour fields that part cannot read are reported once per battle as
+  `[sim] bond <id> uses … — only stat fields apply (plugin bond)`. Nothing else follows from a name or description
+  [ASSUMED]: prep `dsl` files can guard funds/layers/gainItem with
   `if: { bondActive: "<id>" }`; members may use `kit.dsl.talents` with the same condition, or sandbox kits.
 - Complete item records may omit a base when their `buffs` use existing item handler pairs (`key` and `bbStr.key`).
   They retain explicit `baseId`, `goldenId`, `isGolden`, `upgradeNum`, `upgradeChessId`, `mergeable`, tier, price and

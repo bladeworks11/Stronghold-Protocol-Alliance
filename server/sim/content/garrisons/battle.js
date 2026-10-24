@@ -77,7 +77,7 @@ export function install(battle) {
   for (const u of battle.allyUnits) {
     if (!S.isOp(u)) continue;
     for (const gid of garrisonIdsOf(u)) {
-      const g = S.garrisonRecord(gid);
+      const g = S.battleRecord(battle, 'garrisons', gid);
       if (g && g.eventType === 'IN_BATTLE') add(u, g);
     }
   }
@@ -86,7 +86,7 @@ export function install(battle) {
   const grants = [];
   for (const it of all.slice()) {
     if (it.key !== 'ADD_BOND') continue;
-    const g2 = S.garrisonRecord(it.bbStr.give_garrison_id);
+    const g2 = S.battleRecord(battle, 'garrisons', it.bbStr.give_garrison_id);
     if (!g2 || g2.eventType !== 'IN_BATTLE') continue;
     for (const t of grantTargets(battle, it)) {
       const got = add(t, g2, it);

@@ -47,6 +47,22 @@ export function gameData() {
 export function setGameData(d) { DATA = d ?? null; CORE = null; }
 
 export const bondRecord = (id) => own(gameData().bonds, id);
+/**
+ * A content record of a battle, resolved from **the battle's own data** first and the process singleton second.
+ *
+ * A room's content set (plugins/…) merges tables this module cannot see: `gameData()` is data/*.json as installed,
+ * so a bond / garrison / item a plugin authored exists only in the set the Battle was built with (`battle.data.raw`,
+ * simdata DataSource). Content helpers that look records up while they have the battle (bonds/plugin, garrisons/battle)
+ * must use this, or plugin content is silently invisible.
+ * @param {object} battle
+ * @param {'bonds'|'items'|'garrisons'|'bands'|'effects'} table
+ * @param {string} id
+ */
+export function battleRecord(battle, table, id) {
+  const raw = battle && battle.data && battle.data.raw;
+  const rec = raw && raw[table] && typeof raw[table] === 'object' ? own(raw[table], id) : null;
+  return rec ?? own(gameData()[table], id);
+}
 export const itemRecord = (id) => own(gameData().items, id);
 export const garrisonRecord = (id) => own(gameData().garrisons, id);
 export const bandRecord = (id) => own(gameData().bands, id);

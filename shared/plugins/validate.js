@@ -303,7 +303,8 @@ function checkData(data, { kitExists = null, vanilla = null, owners = null, vali
   if (vanilla) {
     const garKeys = new Set(Object.values(vanilla.garrisons).map(g => g.effectKey));
     const buffKeys = new Set(Object.values(vanilla.effects).flatMap(e => (e.buffs ?? []).map(b => b.key)));
-    for (const [id, g] of Object.entries(data.garrisons)) if (!own(vanilla.garrisons, id) && !garKeys.has(g.effectKey)) bad(id, 'unknown garrison effectKey', 'PLUGIN_EFFECT_REF');
+    // `displayOnly` (importer [ASSUMED]): a 特质 whose effectKey this engine has no handler for, kept for its text only.
+    for (const [id, g] of Object.entries(data.garrisons)) if (!own(vanilla.garrisons, id) && g.displayOnly !== true && !garKeys.has(g.effectKey)) bad(id, 'unknown garrison effectKey', 'PLUGIN_EFFECT_REF');
     for (const [id, e] of Object.entries(data.effects)) if (!own(vanilla.effects, id)) {
       for (const b of e.buffs ?? []) if (!buffKeys.has(b.key)) bad(id, 'unknown effect buff key', 'PLUGIN_EFFECT_REF');
     }

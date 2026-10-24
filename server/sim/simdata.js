@@ -554,8 +554,10 @@ export function freezeDef(d) {
 }
 
 /**
- * A DataSource resolves ids to normalised defs. `raw` is `{ chess, enemies, tokens, stages, waves, backups? }`
- * (`backups` = data/backups.json `{ units, diy }`, the 补位 stand-ins: getChess(id, { standIn: true })).
+ * A DataSource resolves ids to normalised defs. `raw` is `{ chess, enemies, tokens, stages, waves, backups?, effects?,
+ * bonds?, garrisons?, items?, bands? }` (`backups` = data/backups.json `{ units, diy }`, the 补位 stand-ins:
+ * getChess(id, { standIn: true }); the last four are the tables a room's content set may extend, read by content code
+ * through support `battleRecord()`).
  */
 export class DataSource {
   constructor(raw = {}, fallback = null) {
@@ -567,6 +569,11 @@ export class DataSource {
       waves: asMap(unwrap(raw.waves, 'waves'), 'id') ?? {},
       backups: raw.backups && typeof raw.backups === 'object' && raw.backups.units ? raw.backups : null,
       effects: raw.effects && typeof raw.effects === 'object' ? raw.effects : null,
+      // Tables a room's content set may add to (plugins/…): content helpers resolve them through `battleRecord()`.
+      bonds: raw.bonds && typeof raw.bonds === 'object' ? raw.bonds : null,
+      garrisons: raw.garrisons && typeof raw.garrisons === 'object' ? raw.garrisons : null,
+      items: raw.items && typeof raw.items === 'object' ? raw.items : null,
+      bands: raw.bands && typeof raw.bands === 'object' ? raw.bands : null,
     };
     this.fallback = fallback;
     this._chess = new Map();

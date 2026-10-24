@@ -39,7 +39,13 @@ export function planForgeRecords({ read, table, allocate, skip, assume = () => {
       delete r.bbStr.item;
     }
     if (target === 'garrisons' && !knownGarrisons.has(r.effectKey ?? table(target)?.[base]?.effectKey)) {
-      reject(file, id, 'effectKey', `No faithful mapping for ${r.effectKey ?? '(missing effectKey)'}; requires a DSL talent or sandbox script kit.`); continue;
+      // [ASSUMED] A 特质 whose effect this engine has no handler for is kept as *display-only* data: the operator's card
+      // shows the trait text the pack wrote (that is why it exists), while battle code never installs it (garrisons/battle.js
+      // only installs eventType IN_BATTLE keys it has an installer for). Dropping the record instead made whole operator
+      // rosters show 没有特质. The report still names the missing behavior.
+      r.displayOnly = true;
+      assume('garrison-display', '没有引擎实现的驻守效果只保留说明文字（特质量显示），战斗里不生效。', 'A garrison effect this engine has no handler for keeps its text (the trait shows) and does nothing in battle.');
+      skip(`${file}:${id}#displayOnly`, `没有 ${r.effectKey ?? '(missing effectKey)'} 的实际行为实现，这条只作为说明文字保留。`, `No behaviour implementation for ${r.effectKey ?? '(missing effectKey)'}; the record is kept for its text only.`);
     }
     if (file === 'bands' && (!base || !table('bands')?.[base])) {
       reject(file, id, 'base/effectRef', `Band requires an official behavior base; unsupported buffs: ${(r.buffs ?? []).map(b => b.key).join(', ')}.`); continue;
