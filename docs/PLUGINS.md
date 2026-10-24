@@ -2267,9 +2267,11 @@ runs. Four outcomes, in this order:
    (`sp.kits.register("char_x_…")`, §13) that the room enables. Packages pair on their own (§14), so enabling the
    content plugin brings its script in. The record carries no `bb` the script does not read.
 3. **A data-only piece** — skills without `bb`. It is bought and placed, its numbers are not implemented anywhere.
-4. **The generic kit** — anything else. It plays what a blackboard says and nothing more: keys it does not know
-   (`move_speed`, `dot`, `hits`, `shield`, `max_stack` …) are dropped silently, so the piece is bought,
-   placed, and its skill looks like a no-op. This is the usual reason a pack's piece "does not work".
+4. **The generic kit** — anything else. It plays what a blackboard says and nothing more: it slows and burns the target
+   (`move_speed`, `dot` + `interval`), hits several times (`hits`), shields itself (`shield`, `shield_max_duration`) and
+   honours `cc_duration` for its own control (SIM §7.4). Keys it does not know (`max_stack`, `cnt`, a nested variant such
+   as `cutter_s_2[drone].atk_scale` …) are dropped silently, so the piece is bought, placed, and that part of its skill
+   looks like a no-op. This is the usual reason a pack's piece "does not work".
 
 `node tools/plugin.mjs audit <id> …` reports that per piece — shop eligibility, which kit runs it, its `bb` keys,
 which of them the generic kit drops, and the same line the server logs as `[plugins] N new piece(s), …` when a room
@@ -2279,7 +2281,8 @@ loop or from a computed id is audited as generic, so check its pieces in a trial
 
 To make a piece work, in order of preference: borrow an official kit in the import, write a `kits-<id>` script and
 register the body there, or (easiest) put the numbers under keys the generic kit reads and enough skill metadata for it
-to fire — the audit's `bb` column is the list to work from.
+to fire — the audit's `bb` column is the list to work from. A skill whose effect is *mechanism* — a summon or device
+(`装置`, `机动盾牌`), a parry stance, a moving beam — still needs a script: the generic kit plays numbers, not new rules.
 ## 17. The catalogue and installing by address (目录与安装)
 
 A catalogue is a document someone else publishes. This project does not host the zips and does not run a market. The

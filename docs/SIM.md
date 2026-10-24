@@ -1205,6 +1205,14 @@ its `atk_scale` 2.1 is the end burst): `atk→atkPct, def→defPct, max_hp→hpP
 resIgnoreFlat, def_penetrate_fixed→defIgnoreFlat, ability_range_forward_extend→targeting.rangeExtend, max_target→
 targeting.maxTargets, atk_scale→attack.atkScale, heal_scale→attack.healScale, times→attack.hits, attack@range_radius→
 attack.splashRadius, trigger_time/ammo→ammo`.
+Keys a **new piece**'s blackboard usually carries and official ones rarely need (a Forge piece has no official
+art/talent to fall back on, PLUGINS §16): `hits→attack.hits` (`times`' other spelling; the larger wins), `move_speed`
+< 0 slows the target a hit lands on (`moveMul` buff × (1+v) — 白雪 "移动速度降低28%"), `dot` burns that target for
+`dot × ATK` of the skill's damage type every `interval` s (default 1 — 白雪 "每秒受到相当于攻击力70%的法术伤害"),
+`shield` gives a self shield when the text does not say 屏障 (`≤ 1` = a share of max HP, `≥ 20` = that much flat HP,
+values between are the counts official blackboards carry, not a shield) decaying over `shield_max_duration` (else 5 s), and `cc_duration` is the length of the skill's own control status; an effect a hit
+leaves on its target lasts `bb.duration`, else the skill's duration when the text says 技能期间/持续时间内, else 5 s. A
+nested variant key (`cutter_s_2[drone].atk_scale`, `talent@…`) describes another mode and is left to a kit.
 Text-aware rules: negative atk/def/RES described on enemies debuff the **targets** (aura over the range while a timed skill
 runs — 初雪; on hit for bb.duration otherwise — 流星, 莱恩哈特); statuses (`stun cold sleep fear sluggish root unmovable`, ×
 `prob`): `attack@` keys on hit, plain keys on hit for instant/charges but **once at start** on ≤ max_target enemies in range

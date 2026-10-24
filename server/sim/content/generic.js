@@ -13,7 +13,12 @@
 //   →hpRegen(Ratio) · sp_recovery_per_sec→spRecoveryFlat · magic_resist_penetrate_fixed→resIgnoreFlat ·
 //   def_penetrate_fixed→defIgnoreFlat · ability_range_forward_extend→targeting.rangeExtend · max_target→targeting.maxTargets
 //   atk_scale→attack.atkScale · heal_scale→attack.healScale · times→attack.hits · attack@range_radius→attack.splashRadius
-//   trigger_time / ammo→ammo.
+//   trigger_time / ammo→ammo · hits→attack.hits (multi-hit; `times` is the other spelling) ·
+//   move_speed<0→the hit target moves slower (moveMul buff) · dot (+ interval)→the hit target takes dot × ATK of the
+//   skill's damage type every interval s (「每秒受到相当于攻击力70%的法术伤害」) · shield (+ shield_max_duration)→a self
+//   shield when the text does not say 屏障: a value ≤ 1 is a share of max HP, a larger one flat HP ·
+//   cc_duration→the duration of the skill's own stun/cold/sleep/fear/root/unmovable statuses. Effects a hit leaves on
+//   its target last bb.duration when given, the skill's duration when the text says 技能期间/持续时间内, else 5 s.
 // Negative atk/def/magic_resistance described on enemies ("攻击范围内所有敌人防御力-40%", "命中目标的防御力-30%") debuff
 //   the targets (aura while the skill runs, or on hit for bb.duration s) instead of the operator.
 // Statuses stun/cold/sleep/fear/sluggish/root/unmovable (× prob): `attack@` keys → on hit; plain keys → on hit for
@@ -195,6 +200,8 @@ export function genericSkillSpec(sk, bb = sk?.bb ?? {}, def = null) {
     if (hs !== undefined && hs > 0 && !allyHeal) attack.healScale = hs;
     const times = ga('times');
     if (times !== undefined && times > 1) attack.hits = Math.min(10, Math.floor(times));
+    const hits = ga('hits');
+    if (hits !== undefined && hits > 1) attack.hits = Math.min(10, Math.max(attack.hits ?? 1, Math.floor(hits)));
     const rr = num(bb['attack@range_radius']);
     if (rr !== undefined && rr > 0 && rr < 5) attack.splashRadius = rr;
     if (kind === 'duration' && STOP_ATTACK.test(desc) && !/之后/.test(desc)) attack.noAttack = true;
@@ -216,6 +223,21 @@ export function genericSkillSpec(sk, bb = sk?.bb ?? {}, def = null) {
       }
     }
   }
+  // cc_duration is the length of the control itself (「使目标停顿0.2秒」 writes attack@
+  // origin_sluggish + cc_duration): it replaces the per-status duration when the skill carries one.
+  const ccDuration = num(bb.cc_duration);
+  if (ccDuration !== undefined && ccDuration > 0) {
+    for (const s of hitStatuses) s.duration = ccDuration;
+    for (const s of startStatuses) s.duration = ccDuration;
+  }
+  // Effects a hit leaves behind: a slow (move_speed < 0) and/or damage over time (dot) on the target.
+  const slowV = num(bb.move_speed);
+  const slow = !passive && slowV !== undefined && slowV < 0 ? Math.min(0.9, -slowV) : 0;
+  const dotV = !passive ? g('dot') : undefined;
+  const dot = dotV !== undefined && dotV > 0 ? dotV : 0;
+  const dotStep = g('interval');
+  const hitEffectDur = num(bb.duration) > 0 ? num(bb.duration)
+    : (/技能(持续)?期间|持续时间内/.test(desc) && sk.duration > 0 ? sk.duration : 5);
   const prob = g('prob');
   const rollProb = (battle) => !(prob !== undefined && prob > 0 && prob < 1) || battle.rng.chance(prob);
 
@@ -280,6 +302,30 @@ export function genericSkillSpec(sk, bb = sk?.bb ?? {}, def = null) {
       if (ctx.target && ctx.target.alive) ctx.battle.addBuff(ctx.target, { key: debuffKey, duration: debuffDur, mods: { ...debuff }, refresh: 'extend', source: ctx.unit });
     };
   }
+  // a hit can also leave a slow and/or damage over time on its target (「移动速度降低28%…每秒受到…70%法术伤害」)
+  if (slow > 0 || dot > 0) {
+    const base = onHitFinal;
+    const slowKey = `generic:slow:${sk.id ?? 'skill'}`;
+    const dotKey = `generic:dot:${sk.id ?? 'skill'}`;
+    const dotType = dmgTypeFromText(desc, 'arts');
+    const step = dotStep !== undefined && dotStep > 0 && dotStep <= 5 ? dotStep : 1;
+    onHitFinal = (ctx) => {
+      if (base) base(ctx);
+      const t = ctx.target;
+      if (!t || !t.alive) return;
+      const src = ctx.unit;
+      if (slow > 0) ctx.battle.addBuff(t, { key: slowKey, duration: hitEffectDur, mods: { moveMul: Math.max(0, 1 - slow) }, refresh: 'extend', source: src });
+      if (dot > 0) {
+        ctx.battle.addBuff(t, {
+          key: dotKey, duration: hitEffectDur, interval: step, refresh: 'extend', source: src,
+          onTick: ({ battle, unit: victim }) => {
+            if (!victim.alive || !src.alive) return;
+            battle.dealDamage(src, victim, { amount: src.s.atk * dot, type: dotType, isSkill: true, tags: ['skill', 'dot'] });
+          },
+        });
+      }
+    };
+  }
   if (onHitFinal) attack.onHit = onHitFinal;
 
   let ammo;
@@ -321,12 +367,20 @@ export function genericSkillSpec(sk, bb = sk?.bb ?? {}, def = null) {
   } else if (hr !== undefined && hr > 0 && hr <= 1 && /(恢复|回复)[^。，]*生命/.test(desc) && !/流失/.test(desc)) {
     starts.push(({ battle, unit }) => battle.heal(unit, unit, unit.s.maxHp * hr, { self: true }));
   }
-  const shieldRatio = /屏障/.test(desc) ? (g('shield_max_hp_ratio') ?? (/生命(上限|值)?\d+(\.\d+)?%的屏障/.test(desc) ? hr : undefined)) : undefined;
-  if (shieldRatio !== undefined && shieldRatio > 0) {
+  // a shield: 屏障 with a share of max HP, or the bare `shield` blackboard key (≤ 1 = a share of max HP; a real HP
+  // figure ≥ 20 is flat. Values between are counts/flags official blackboards use, not a shield, and are ignored)
+  const shieldKeyValue = g('shield');
+  const barrierText = /屏障/.test(desc);
+  const shieldShare = shieldKeyValue !== undefined && shieldKeyValue > 0 && shieldKeyValue <= 1 ? shieldKeyValue : undefined;
+  const shieldRatio = barrierText
+    ? (g('shield_max_hp_ratio') ?? shieldShare ?? (/生命(上限|值)?\d+(\.\d+)?%的屏障/.test(desc) ? hr : undefined))
+    : shieldShare;
+  const shieldFlat = !barrierText && shieldKeyValue !== undefined && shieldKeyValue >= 20 ? shieldKeyValue : undefined;
+  if ((shieldRatio !== undefined && shieldRatio > 0) || (shieldFlat !== undefined && shieldFlat > 0)) {
     const dur = g('shield_max_duration') ?? num(bb.duration) ?? (sk.duration > 0 ? sk.duration : 0);
     const decays = /衰减/.test(desc) && dur > 0;
     starts.push(({ battle, unit }) => {
-      const total = unit.s.maxHp * shieldRatio;
+      const total = shieldFlat ?? unit.s.maxHp * shieldRatio;
       battle.addBuff(unit, {
         key: `generic:shield:${sk.id ?? 'skill'}`, shield: total, duration: dur > 0 ? dur : Infinity, visible: true, interval: decays ? 0.5 : 0,
         onTick: decays ? ({ unit: u, buff }) => { buff.shield = Math.max(0, buff.shield - total * 0.5 / dur); u.markDirty(); } : null,
