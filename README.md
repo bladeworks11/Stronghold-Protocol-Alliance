@@ -1,20 +1,30 @@
 # 卫戍协议：盟约 · Stronghold Protocol: Alliance
 
-《明日方舟》季节性自走棋塔防玩法「卫戍协议：盟约」的**非官方同人复刻**：浏览器即开即玩，单人或 1–4 人联机合作。
+《明日方舟》季节性自走棋塔防玩法「卫戍协议：盟约」的**非官方同人复刻**：浏览器即开即玩，单人或 1–4 人联机合作。这个仓库是**个人维护的分支**，在上游之上多了一个 Windows 桌面客户端、内容自动同步和一批本地插件。
 
 ![version](https://img.shields.io/badge/version-0.3.1-2ea44f)
 ![license](https://img.shields.io/badge/code%20license-GPL--3.0--or--later-blue)
 ![node](https://img.shields.io/badge/node-22%20%7C%2024-339933)
+![desktop](https://img.shields.io/badge/desktop-Windows%20installer-2ea44f)
+
+## 和上游的关系
 
 > [!NOTE]
-> **这是一个个人维护的分支（personal build）**：[上游项目](https://github.com/sganggs/Stronghold-Protocol)由 `sganggs` 与贡献者开发，原始代码、文档、规则与数据的功劳都归上游，同样遵循 GPL-3.0。本分支只在上游之上叠加了个人自用的改动——一批插件、桌面客户端（`desktop/`）、内容同步与若干体验修复，详见 [CHANGELOG.md](CHANGELOG.md)。它不代表上游的发布；遇到问题请先对照上游版本复现，与上游无关的部分再提到这边。
+> **这是一个个人维护的分支（personal build）**：[上游项目](https://github.com/sganggs/Stronghold-Protocol)由 `sganggs` 与贡献者开发，原始代码、文档、规则与数据的功劳都归上游，同样遵循 GPL-3.0。本分支只在上游之上叠加了个人自用的改动，不代表上游的发布；遇到问题请先对照上游版本复现，与上游无关的部分再提到这边。
+
+本分支比上游多出来的东西：
+
+- **桌面客户端**（`desktop/`）：双击即玩，不用开浏览器；素材与插件在启动后台自动补齐和更新，服务器换了素材不用再发安装包。
+- **内容自动同步**：客户端向服务器要一份素材与插件文件的哈希清单，只下载缺失或变化的文件；安装包自带的部分按哈希对齐，升级也只补真正变化的那部分。
+- **一批插件**：原创内容包与配套外观（`-look`）、行为脚本（`kits-*`）、界面与语言补全包；仓库里只有插件格式与模板，插件本体在服主的 `plugins/` 目录。
+- **体验修复**：离开对局后再回来观战不再卡在加载、20 人同盟对局记录完整、丰川祥子音符必中、时装骨架继承原皮角色表、房间里首次开插件的等待从 5.4 秒降到 0.4–1.3 秒。
 
 ## 声明
 
 > [!IMPORTANT]
 > - 本项目是玩家自制的**非官方同人作品**，与上海鹰角网络科技有限公司（Hypergryph）、Yostar 及其关联方**没有任何关系**，未获其授权或认可。
 > - 《明日方舟》及「卫戍协议」相关的名称、角色、美术、音乐、音效、文本与数据等素材，版权归原权利人所有。这些素材**不适用**本项目的 GPL-3.0 许可证；GPL 只覆盖本项目自己编写的代码。
-> - 仅供学习交流与个人非商业使用。**严禁任何形式的盈利**，包括但不限于：售卖本项目或整合包、付费下载或付费分发、收费服务器或收费代开、广告 / 打赏 / 会员等变现方式，以及其他任何商业用途。
+> - 仅供学习交流与个人非商业使用。**严禁任何形式的盈利**，包括但不限于：售卖本项目或安装包、付费下载或付费分发、收费服务器或收费代开、广告 / 打赏 / 会员等变现方式，以及其他任何商业用途。
 > - 仓库源码不包含游戏的美术与音频素材（只有由官方数据表生成的数据和几张游戏截图，同样不适用 GPL）；[Releases](../../releases/latest) 中的完整包为了方便玩家附带了素材（精简包不带，首次启动时从公开镜像下载），下载即视为同意本声明。请勿将素材用于本项目以外的用途或单独再分发。完整条款见 [NOTICE.md](NOTICE.md)。
 > - 权利人如认为本项目侵犯其权益，请通过 Issue 联系，我们会**立即删除**相关内容。
 > - 本项目按「现状」提供，**不提供任何担保**，使用风险自负。
@@ -30,7 +40,7 @@ English summary: [below](#english).
 ## 目录
 
 - [声明](#声明) · [简介](#简介) · [功能一览](#功能一览)
-- [快速开始](#快速开始)：[整合包](#方式一整合包推荐) · [从源码运行](#方式二从源码运行) · [系统要求](#系统要求) · [端口与配置](#端口与配置) · [局域网联机](#和朋友一起玩局域网)
+- [快速开始](#快速开始)：[桌面客户端](#方式一桌面客户端推荐windows) · [从源码开服](#方式二从源码开服) · [系统要求](#系统要求) · [端口与配置](#端口与配置) · [局域网联机](#和朋友一起玩局域网)
 - [插件](#插件) · [联机方式](#联机方式) · [操作](#操作) · [文档](#文档) · [开发与测试](#开发与测试) · [项目结构](#项目结构)
 - [许可证](#许可证) · [致谢与数据来源](#致谢与数据来源) · [贡献](#贡献)
 
@@ -40,7 +50,8 @@ English summary: [below](#english).
 
 - **独立模拟**（单人）与**同盟模拟**（1–4 人**合作**，没有 PvP；空位可以加 AI 队友）。
 - 服务器是一个 Node.js 程序，**战斗在各玩家的浏览器里模拟**（和官方一样），服务器只管经济与回合，一台低功耗小主机就能开服。
-- 当前版本 0.3.1：Forge 工坊包导入大幅补齐（主题变量、公告、行为开关、新的盟约 / 装备 / 召唤物 / 驻守与池外官方干员、面板兼容层、特效、皮肤），插件工作台为这些新功能加了图形化模板；设置新增「素材存储」（申请持久保存、清理旧版本素材）；修复余、野鬃、缪尔赛思、瑕光等干员的官方特效和动作，琳琅诗怀雅三技能改为官方的不自动关闭，详见 [CHANGELOG.md](CHANGELOG.md)。仍有少数规则按推断实现，与官方不一致的地方欢迎在 Issue 里反馈。
+- **桌面客户端**（本分支新增）：Windows 安装包，双击就进游戏；素材与插件自动同步，不用再关心「素材包」「外观包」要不要单独装。
+- 当前版本 0.3.1：上游 0.3.1 的内容都在（Forge 工坊包导入、插件工作台的图形化模板、素材存储设置，以及余、野鬃、缪尔赛思、瑕光等干员的官方特效与动作修复）；本分支另外加了桌面客户端、46 个插件、Forge 包导入对官方带方括号素材 id 的支持（s7、s8、东盟约等包可以整包导入），并入上游最新的修复。详见 [CHANGELOG.md](CHANGELOG.md)。仍有少数规则按推断实现，与官方不一致的地方欢迎在 Issue 里反馈。
 
 ## 功能一览
 
@@ -63,49 +74,49 @@ English summary: [below](#english).
 
 ## 快速开始
 
-### 方式一：整合包（推荐）
+### 方式一：桌面客户端（推荐，Windows）
 
-[Releases](../../releases/latest) 里有两种整合包，代码和运行依赖完全相同，二选一；已经装好 0.2.x 的，升级时只下载更新包即可：
+到 [Releases](https://github.com/bladeworks11/Stronghold-Protocol-Alliance/releases/latest) 下载，挑一个装：
 
-- **完整包** `Stronghold-Protocol-v<版本>.zip`（约 800 MB，解压后约 1.16 GB）：附带全部美术 / 音频（含中文、日文、英文、韩文和本土语言的干员语音、官方 3D 棋盘贴图、各战场的官方场景和官方战斗特效），解压就能玩，不需要再下载任何东西。**推荐。**
-- **精简包** `Stronghold-Protocol-v<版本>-lite.zip`（约 25 MB）：不带素材，第一次启动时自动从公开镜像下载美术、Spine 模型、音频、字体、表情和「玩法说明」教程图（约 720 MB，可中断，再次启动会续传）；官方 3D 棋盘等本地客户端素材不在其中（见下面的「本地客户端素材」；各战场的官方场景可以用 `node tools/setup.mjs --scenes` 在本机下载并提取）。适合下载大文件不方便的情况。
-- **更新包** `Stronghold-Protocol-v<版本>-update.zip`（0.2.1 起提供，大小看改动多少，通常只有几 MB）：只含比之前的 0.2.x 版本改动过的文件，用来把已经装好的 0.2.x（完整包或精简包装的都行）升级到新版本，不用重新下载整个包。用法：先停止服务器（关掉窗口；装了开机自启的运行 `scripts\install-service-windows.ps1 -Stop`），把 zip 里 `Stronghold-Protocol` 文件夹的全部内容合并到安装文件夹、覆盖同名文件（Windows 资源管理器里复制粘贴即可；macOS 不要用访达拖放，它会整个替换文件夹，请用 `unzip -o`，见 [docs/DEPLOY.md](docs/DEPLOY.md) 第 1.5 节），再照常启动。启动时会先核对全部程序文件、删除新版本不再用的旧文件，然后正常运行；如果这个文件夹不是更新包对应的版本（例如 0.1.x，或者程序文件被改过），会提示下载完整包，服务器不启动。全新安装请用完整包或精简包。
+| 文件 | 说明 |
+|---|---|
+| `Stronghold-Protocol-Setup-0.3.1.exe`（约 152 MB） | **推荐**。轻量安装包，不带素材：第一次启动后客户端向服务器要素材与插件清单，只把缺的、变过的文件下到 `userData\content`，以后的更新也是如此 |
+| `Stronghold-Protocol-Setup-0.3.1-full.exe`（约 1.0 GB） | 完整安装包，素材已经打进去，装好即玩；适合网络不好或想自己开服的人 |
+| `Stronghold-Protocol-0.3.1-light.zip` / `-assets.zip` | 免安装的便携版，解压即用，区别同上 |
+| `Stronghold-Protocol-Client-0.3.1-patch.zip`（25 KB） | 已经装过旧客户端的，关掉客户端，把 zip 里的 `resources\app\` 覆盖到安装目录即可，不用重装 |
 
-两种包都包含运行和部署文件，以及插件作者需要的工具、模板、Schemas、插件文档和战斗测试助手。完整开发测试与设计文档仍在源码仓库里。
+1. 双击安装包，选安装目录（会自动建 `Stronghold Protocol` 子文件夹），装完桌面和开始菜单都有快捷方式。
+2. 打开客户端，输入昵称就能进大厅。默认连本项目的服务器 `http://112.124.47.122`；想连别的服务器，改安装目录下 `resources\app\config.json` 里的 `server`。
+3. 昵称、设置和外观插件都存在本机的 `userData` 里，重装安装包不会丢；打开「设置 → 账号同步」后，同一个博士代号还能跨设备接上。
 
-1. **安装 Node.js 22 或 24（LTS）**
-   - Windows：在 PowerShell 里运行 `winget install OpenJS.NodeJS.LTS`，或到 <https://nodejs.org/zh-cn/download> 下载安装包。
-   - macOS：`brew install node@22`，或到官网下载安装包。
-   - Linux：发行版的包管理器、nvm 或 fnm。
-2. **下载**：在 [Releases](../../releases/latest) 页面下载最新版本的完整包（或精简包），解压到一个路径较短的文件夹（Windows 上建议不要放在 OneDrive 同步的目录里）。
-3. **启动**
-   - Windows：双击 **`scripts\start-windows.bat`**。如果弹出「安全警告」，点「运行」；Windows 防火墙弹窗请勾选「专用网络」并允许。
-   - macOS / Linux：在解压出的文件夹里运行 `./scripts/start.sh`（或 `bash scripts/start.sh`）。
-4. 浏览器会自动打开 `http://localhost:3000`。窗口里列出的局域网地址可以直接发给同一网络的朋友。关闭窗口（或按 `Ctrl+C`）即停止服务器。
+安装包用自签名证书签名，Windows 可能提示「未知发布者」，点「更多信息 → 仍要运行」即可。
 
-### 方式二：从源码运行
+**内容自动同步**：客户端启动后会在后台请求 `/sync/manifest.json`（素材与插件文件的哈希），只下载缺失或变化的文件，校验后缓存到 `userData\content`；安装包自带的部分按哈希对齐，所以升级安装包也只补真正变化的那部分。服务器换素材、加插件、换皮肤之后，玩家重启客户端就同步好了，不必重发安装包。想看着它跑完再开窗口，可以给客户端加启动参数 `--content-sync`。
+
+### 方式二：从源码开服
 
 ```bash
-git clone https://github.com/sganggs/Stronghold-Protocol.git
-cd Stronghold-Protocol
+git clone https://github.com/bladeworks11/Stronghold-Protocol-Alliance.git
+cd Stronghold-Protocol-Alliance
 npm install        # 安装依赖（postinstall 会把 pixi / preact / three 复制到 public/vendor）
 npm run setup      # 检查环境，并从公开镜像下载约 720 MB 美术 / 音频（可中断，再次运行会续传）
 npm start          # 启动服务器：http://localhost:3000
 ```
 
-也可以直接运行启动脚本（Windows `scripts\start-windows.bat`，macOS / Linux `scripts/start.sh`）：首次会自动安装依赖、下载素材，然后启动服务器并打开浏览器。
+仓库里**不含游戏素材**（版权归鹰角网络，见下方声明）。素材有两个来源：`npm run setup` 从公开镜像下载；或者从完整安装包里拿 `resources\app\assets`、`resources\app\fonts`、`resources\app\media` 放到 `public\` 下。
 
-- **本地客户端素材（可选）**：官方 3D 棋盘、官方战斗特效（0.3.0「官方特效」）、部分官方界面图标（交流按钮与表情面板的边框、模组类型图标等）、灼热 / 炽焰源石虫和 39 个召唤物（多数自选召唤物）的官方模型需要从本机的《明日方舟》PC 客户端提取（Windows 原生客户端、macOS 的 CrossOver 或 PlayCover）。`npm run setup` 检测到客户端时会询问是否提取（需要 Python 3.8+，依赖装在项目内的 `.venv-extract`，不影响系统）；之后可以用 `node tools/setup.mjs --local` 重新提取，或用 `--game "<…/StreamingAssets/AB/Windows>"` 指定路径。没有客户端时游戏照常运行，这几样换成替代样式：2D 棋盘、样式相近的图标、染色的普通源石虫、召唤物头像。表情和「玩法说明」的教程图随上面的素材一起从公开镜像下载，不需要客户端。没有客户端的服务器（例如 Linux VPS）也可以从**同一版本**的整合包（完整包；精简包没有）里复制 `public/assets/local/` 和 `data/local-assets.json`，见 [docs/DEPLOY.md](docs/DEPLOY.md) 的「本地客户端素材」。
+- **桌面客户端源码**：`desktop/` 是客户端的完整源码（Electron 主进程、预加载脚本、内容同步模块和构建脚本），与 `client/` 同步；打包方式见 [desktop/README.md](desktop/README.md)。
 - 素材下载优先使用 GitHub，失败时自动改用 jsDelivr 镜像。
+- **本地客户端素材（可选）**：官方 3D 棋盘、官方战斗特效、部分官方界面图标、灼热 / 炽焰源石虫和 39 个召唤物的官方模型需要从本机的《明日方舟》PC 客户端提取。`npm run setup` 检测到客户端时会询问是否提取（需要 Python 3.8+，依赖装在项目内的 `.venv-extract`，不影响系统）；之后可以用 `node tools/setup.mjs --local` 重新提取，或用 `--game "<…/StreamingAssets/AB/Windows>"` 指定路径。没有客户端时游戏照常运行，这几样换成替代样式。没有客户端的服务器（例如 Linux VPS）也可以从完整安装包里复制 `public/assets/local/` 和 `data/local-assets.json`，见 [docs/DEPLOY.md](docs/DEPLOY.md) 的「本地客户端素材」。
 - `npm run doctor`（即 `node tools/doctor.mjs`）可以随时诊断：Node 版本、素材是否完整、端口占用、局域网地址和防火墙。
 
 ### 系统要求
 
 | 项目 | 要求 |
 |---|---|
-| 开服的电脑 | Windows / macOS / Linux，Node.js 22 或 24（LTS）；磁盘约 1.2–1.4 GB（素材、依赖与本地提取的贴图、场景和特效：完整包解压后约 1.16 GB）；内存空闲约 100 MB，每局再加几 MB |
-| 玩家 | 支持 WebGL 的现代浏览器（Chrome / Edge / Firefox / Safari 最新版），电脑、手机或平板（横屏） |
-| 网络 | 首次进入游戏时，每位玩家要从开服的电脑下载几十 MB 素材（之后走浏览器缓存）；对局中流量很小。已有素材的玩家可以在标题画面点「导入素材包」（「下载完整素材」旁边），从素材包 zip、完整包 zip 或自己的 `public/assets` 文件夹导入，这部分美术不再从开服的电脑下载；需要 HTTPS 或 localhost（[docs/DEPLOY.md](docs/DEPLOY.md) 2.5 节）。0.3.0 的素材包 `Stronghold-Protocol-v0.3.0-assets.zip` 由维护者另行提供下载，不在 Releases 附件里 |
+| 开服的电脑 | Windows / macOS / Linux，Node.js 22 或 24（LTS）；磁盘约 1.2–1.4 GB（素材、依赖与本地提取的贴图、场景和特效）；内存空闲约 100 MB，每局再加几 MB |
+| 玩家 | 桌面客户端（Windows 10/11）或支持 WebGL 的现代浏览器（Chrome / Edge / Firefox / Safari 最新版），电脑、手机或平板（横屏） |
+| 网络 | 对局中流量很小。浏览器直接访问时，首次进入要从开服的电脑下载几十 MB 素材（之后走浏览器缓存），也可以在标题画面点「导入素材包」从 zip 或自己的 `public/assets` 导入。**桌面客户端不用管这些**：启动后自动同步清单里缺的素材与插件文件，缓存到本机 `userData\content` |
 
 显卡较弱时可以在「设置」里调低画质，或在网址后加 `?board=2d`（强制 2D 棋盘）/ `?render=fallback`（不用 WebGL 的简化画面）。
 
@@ -143,9 +154,11 @@ npm start          # 启动服务器：http://localhost:3000
 
 ## 插件
 
-0.3.0 起支持插件；不开插件时按原版游玩。
+0.3.0 起支持插件；不开插件时按原版游玩。本项目的服务器上装了 46 个插件（原创内容包、配套外观、行为脚本、界面与语言补全），插件本体不进仓库，格式与模板在 `plugins/_template/`。
 
 - **服主安装**：将插件文件夹放进服务器的 `plugins/`，或用 `node tools/plugin.mjs install <zip路径或HTTPS地址>` 安装；远程地址需带 `--sha256`。工作台也支持从社区目录安装和导入 Forge 工坊包。服主可在 `plugins/config.json` 限定可用插件。
+- **成对勾选（本分支）**：勾一个内容包（例如 `dongship`）会顺带勾上它的配套外观（`dongship-look`）和依赖它的行为脚本（`kits-dongship`），取消时一起取消；同名插件在列表里挨在一起，重名的行后面会标出它是「数据 / 脚本 / 外观 / 界面 / 语言」中的哪一种。
+- **首次开插件不再卡住（本分支）**：房间第一次启用某个插件组合时要在服务器上把它编译成内容集，原来要 5.4 秒，现在 0.4–1.3 秒（记录整批展开、没改过的数据表直接复用文本与哈希、启动时预热沙箱脚本）。
 - **房主开启**：在房间顶部的「原版 / 插件 ×N」面板里选外观或玩法插件、修改插件设置、选择插件模式。玩法插件的内容会由所有玩家下载并校验，房间标为「非官方」，统计总览默认不计入。
 - **玩家个人设置**：「设置 → 外观插件 / 界面插件」只影响自己的浏览器；个人不能另装玩法插件改变房间规则。外观插件只换画面与声音，界面插件只读允许的对局信息。
 - **自己制作**：打开启动窗口 `Studio:` 行的地址，使用 `/studio/` 插件工作台选模板、按官方名称选目标、拖放素材、实时预览、试一场并回放，最后打包分享。工作台限本机和局域网，修改需要钥匙。
@@ -161,7 +174,7 @@ npm start          # 启动服务器：http://localhost:3000
 | **同一局域网直连** | 把启动窗口里的局域网地址发给朋友 | 同一个家、宿舍或网吧 |
 | **组网工具（虚拟局域网）** | 例如 Tailscale、ZeroTier、EasyTier、蒲公英：开服的人和朋友都安装同一个工具并加入同一个网络，朋友用开服电脑的虚拟 IP 访问 `http://<虚拟 IP>:3000` | 固定的几个熟人；不暴露到公网。朋友也要装客户端，部分工具需要注册账号；跨地区时可能走中继而变慢 |
 | **内网穿透 / 隧道** | 只有开服的人运行客户端，朋友直接打开网址。例如自建的 frp（需要一台有公网 IP 的服务器）、Cloudflare 的 `cloudflared tunnel --url http://localhost:3000`（临时地址，每次启动都会变；国内访问延迟可能较高）、国内的樱花 frp 一类公共穿透服务（通常需要实名，大陆节点承载网页可能有备案要求） | 不想改路由器、没有公网 IP；免费线路带宽小时，首次加载素材会慢一些 |
-| **云服务器 / VPS 直接部署** | 在 VPS 上运行整合包，或用仓库自带的 `Dockerfile`；用 Caddy / Nginx 加上 HTTPS。选离玩家近、线路好的地区（面向大陆玩家时，境外机房要关注回程线路，否则晚高峰延迟可能很高；大陆服务器绑定域名需要 ICP 备案） | 想长期开服、玩家分布在不同地区 |
+| **云服务器 / VPS 直接部署** | 在 VPS 上跑本仓库（或用仓库自带的 `Dockerfile`）；用 Caddy / Nginx 加上 HTTPS。选离玩家近、线路好的地区（面向大陆玩家时，境外机房要关注回程线路，否则晚高峰延迟可能很高；大陆服务器绑定域名需要 ICP 备案） | 想长期开服、玩家分布在不同地区 |
 
 通用注意事项：
 
@@ -192,6 +205,7 @@ npm start          # 启动服务器：http://localhost:3000
 
 | 文档 | 内容 |
 |---|---|
+| [desktop/README.md](desktop/README.md) | 桌面客户端（本分支）：构建、图标与签名、`--smoke` 自检、内容同步的工作方式、常见问题 |
 | [CHANGELOG.md](CHANGELOG.md) | 更新记录：每个版本修复了什么、哪些反馈经核实不是问题 |
 | [docs/PLAYING.md](docs/PLAYING.md) | 玩法指南：流程、经济、招募与晋升、摆阵、联防、盟约、最终攻势、结算称号 |
 | [docs/PLUGINS.md](docs/PLUGINS.md) · [docs/PLUGIN-GUIDE.md](docs/PLUGIN-GUIDE.md) | 插件格式、安装与服主策略；中文工作台入门、DSL 和对战试验 |
@@ -237,16 +251,18 @@ node tools/perfbench.mjs --cpu 1,4,6 --profile             # 真实战斗的帧�
 | `tools/` | `setup.mjs` / `doctor.mjs`、素材下载 `fetch-assets.mjs`、数据构建、本地提取 `local-extract/` |
 | `scripts/` | 启动脚本（Windows / macOS / Linux）、Windows 开机自启 |
 | `docs/` | 文档与调研 |
+| `desktop/` | 桌面客户端（本分支）：Electron 主进程与预加载脚本、内容同步 `sync.js`、构建与签名脚本、测试 |
 | `test/` | `node:test` 测试 |
 
 ## 许可证
 
 - **代码**：本项目自己编写的代码以 **GPL-3.0-or-later** 发布，全文见 [LICENSE](LICENSE)；另附一条 GPL 第 7 条的附加许可，允许与 pixi-spine 中的 Spine Runtimes 组合分发（见 [NOTICE.md](NOTICE.md)）。
 - **游戏素材不在许可范围内**：《明日方舟》相关的美术、音乐、音效、文本与数据等版权归原权利人所有，不适用 GPL，使用限制见上方的[声明](#声明)和 [NOTICE.md](NOTICE.md)。
-- **第三方组件**各自遵循其许可证：通过 npm 安装的库（整合包的 `node_modules` 中附带各自的许可证文件）、`tools/local-extract/aklz4.py` 的算法（BSD-3-Clause），以及字体等，清单与许可证全文见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+- **第三方组件**各自遵循其许可证：通过 npm 安装的库（`node_modules` 中附带各自的许可证文件）、`tools/local-extract/aklz4.py` 的算法（BSD-3-Clause），以及字体等，清单与许可证全文见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
 
 ## 致谢与数据来源
 
+- **上游项目**：[sganggs/Stronghold-Protocol](https://github.com/sganggs/Stronghold-Protocol) —— 本仓库的全部原始代码、文档、规则实现与数据构建都来自这里，由 `sganggs` 与贡献者维护；本分支只是它的个人二创分支，同样以 GPL-3.0 发布。插件生态里还有 [XiaMo233M/Stronghold-Protocol-Forge-Mods](https://github.com/XiaMo233M/Stronghold-Protocol-Forge-Mods) 等社区作者的工坊包。
 - 游戏数据：[Kengxxiao/ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData)。
 - 素材来源：[yuanyan3060/ArknightsGameResource](https://github.com/yuanyan3060/ArknightsGameResource)、[fexli/ArknightsResource](https://github.com/fexli/ArknightsResource)、[isHarryh/Ark-Models](https://github.com/isHarryh/Ark-Models)、[ArknightsAssets/ArknightsAssets2](https://github.com/ArknightsAssets/ArknightsAssets2)；字体来自 [TimWangZi/The-font-of-Arknights](https://github.com/TimWangZi/The-font-of-Arknights) 与 Google Fonts（Noto Sans SC）。详见 [docs/ASSETS.md](docs/ASSETS.md)。
 - 规则核对参考：[PRTS 明日方舟中文 Wiki](https://prts.wiki/)。
@@ -269,9 +285,13 @@ node tools/perfbench.mjs --cpu 1,4,6 --profile             # 真实战斗的帧�
 
 ## English
 
-An **unofficial, non-commercial fan remake** of Arknights' seasonal auto-chess tower-defense mode *Stronghold Protocol: Alliance*, played in the browser: solo, or 1–4 player co-op (AI teammates can fill seats). Combat is simulated in each player's browser, so a low-power PC can host.
+An **unofficial, non-commercial fan remake** of Arknights' seasonal auto-chess tower-defense mode *Stronghold Protocol: Alliance*: solo, or 1–4 player co-op (AI teammates can fill seats). Combat is simulated in each player's browser, so a low-power PC can host.
 
-- **Run:** download the full bundle `Stronghold-Protocol-v<version>.zip` (~800 MB, all the art inside, the Chinese, Japanese, English, Korean and own-language operator voices, the official battlefield scenes and the official battle effects included) from [Releases](../../releases/latest) — or the lite one, `…-lite.zip` (~25 MB), which downloads the art (~720 MB) on its first start; from 0.2.1 on, `…-update.zip` holds only the files changed since the earlier 0.2.x releases: stop the server, extract it over an existing 0.2.x folder and start again (the first start deletes the files the new version dropped and verifies the install) — install Node.js 22 or 24, then double-click `scripts\start-windows.bat` (Windows) or run `./scripts/start.sh` (macOS / Linux) and open <http://localhost:3000>. From source: `npm install && npm run setup && npm start` (setup downloads ~720 MB of art from public mirrors, the emotes and the how-to-play pages included; the official 3D board, some official HUD icons, two enemy models and 39 summon models are extracted from a local Arknights client — without one the game uses the 2D board and look-alike stand-ins (the summons show their avatars), and a server can copy `public/assets/local/` and `data/local-assets.json` from the full bundle of the same version).
+**This repository is a personal build of [sganggs/Stronghold-Protocol](https://github.com/sganggs/Stronghold-Protocol).** All original code, docs, rules and data come from upstream and stay under GPL-3.0; this fork adds a Windows desktop client, automatic content sync, a set of server-side plugins and a few fixes. It is not an upstream release.
+
+- **Desktop client (this fork):** download `Stronghold-Protocol-Setup-0.3.1.exe` (~152 MB, recommended — the client fetches the art and plugin files it is missing on first start) or `…-Setup-0.3.1-full.exe` (~1.0 GB with all the art inside) from [Releases](https://github.com/bladeworks11/Stronghold-Protocol-Alliance/releases/latest), run it, and enter a nickname. Portable zips (`…-0.3.1-light.zip` / `…-assets.zip`) need no installation, and `…-Client-0.3.1-patch.zip` upgrades an older install by replacing `resources\app\`. The client talks to `http://112.124.47.122` by default (edit `server` in `resources\app\config.json` to point elsewhere) and keeps nicknames, settings and cosmetic plugins in its own `userData`.
+- **Host it yourself:** `git clone https://github.com/bladeworks11/Stronghold-Protocol-Alliance.git`, then `npm install && npm run setup && npm start` (setup downloads ~720 MB of art from public mirrors; the repository ships no game art). The official 3D board, some HUD icons, two enemy models and 39 summon models are extracted from a local Arknights client — without one the game uses the 2D board and look-alike stand-ins.
+- **Plugins:** 46 plugins run on this project's server (content packs, matching `-look` cosmetics, `kits-*` behaviour scripts, UI and language packs). Enabling a content pack also enables its look and script, identically named rows sit together, and the first switch to a plugin set takes 0.4–1.3 s instead of 5.4 s.
 - **Languages:** Chinese (the default), English, 日本語, 한국어 and 繁體中文 — switch on the title screen or in Settings. Game texts come from the official clients; the Japanese, Korean and Traditional Chinese interface strings are machine translations (corrections welcome: [docs/I18N.md](docs/I18N.md)).
 - **Play with friends:** create a co-op room and share the 4-letter key or the `?room=KEY` link. On a LAN, use the address printed at start; otherwise use a virtual-LAN tool, a tunnel or a VPS — see [docs/DEPLOY.md](docs/DEPLOY.md).
 - **Disclaimer:** not affiliated with or endorsed by Hypergryph or Yostar. All Arknights names, art, audio, text and data are © their respective owners and are **not** covered by this project's GPL licence. For study and personal non-commercial use only — no selling, paid distribution, paid servers or monetisation of any kind. Content will be removed on request of the rights holders. Provided "as is", without warranty.
