@@ -2255,6 +2255,31 @@ The version written into a product is the pack's version when it is a restricted
 otherwise `0.1.0` [ASSUMED]. `app` is `>=0.3.0 <0.4.0` and `api` is 1. A language-pack manifest omits `$schema`,
 `app`, `api` and `permissions`.
 
+### What a new piece can actually do (新棋子能做什么)
+
+A Forge pack adds pieces, but whether a piece's skill *does* anything is decided by the kit that runs it, and a
+pack cannot ship a kit by itself: server/ code in a Forge pack is not imported (`PLUGIN_FORGE_SCRIPT`) and never
+runs. Four outcomes, in this order:
+
+1. **A borrowed official kit** — the record carries `kitRef` (a character id), `skillSpec` or `dsl`; that kit runs
+   the piece and reads its `bb` with its own vocabulary. Most imported pieces are this kind.
+2. **A body a room script kitted** — the piece's `charId` is registered by a `kits-<id>` script
+   (`sp.kits.register("char_x_…")`, §13) that the room enables. Packages pair on their own (§14), so enabling the
+   content plugin brings its script in. The record carries no `bb` the script does not read.
+3. **A data-only piece** — skills without `bb`. It is bought and placed, its numbers are not implemented anywhere.
+4. **The generic kit** — anything else. It plays what a blackboard says and nothing more: keys it does not know
+   (`move_speed`, `dot`, `hits`, `shield`, `max_stack` …) are dropped silently, so the piece is bought,
+   placed, and its skill looks like a no-op. This is the usual reason a pack's piece "does not work".
+
+`node tools/plugin.mjs audit <id> …` reports that per piece — shop eligibility, which kit runs it, its `bb` keys,
+which of them the generic kit drops, and the same line the server logs as `[plugins] N new piece(s), …` when a room
+builds the set (the log only mentions the sums). `--json` gives the table. The audit builds the set the way a room
+does — the pack plus the `kits-<id>` scripts that require it — and runs no script: a script that registers kits in a
+loop or from a computed id is audited as generic, so check its pieces in a trial (§15) before blaming the game.
+
+To make a piece work, in order of preference: borrow an official kit in the import, write a `kits-<id>` script and
+register the body there, or (easiest) put the numbers under keys the generic kit reads and enough skill metadata for it
+to fire — the audit's `bb` column is the list to work from.
 ## 17. The catalogue and installing by address (目录与安装)
 
 A catalogue is a document someone else publishes. This project does not host the zips and does not run a market. The

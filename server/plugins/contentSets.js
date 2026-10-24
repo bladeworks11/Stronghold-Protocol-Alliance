@@ -29,6 +29,7 @@ import { ERR, DIFFICULTIES } from '../../shared/constants.js';
 import { contentHashOf, csUrlPart, isContentHash } from '../../shared/plugins/identity.js';
 import { normalizeSettings } from '../../shared/plugins/patch.js';
 import { buildContentSet, contentSetFiles } from './contentSet.js';
+import { chessAuditLine } from './chessAudit.js';
 
 const noopLog = { info() {}, warn() {}, error() {}, debug() {} };
 /** Content sets kept that no room holds (their /cs/ files stay servable a while). [ASSUMED] */
@@ -189,6 +190,8 @@ export function createContentSets({ registry, vanillaData, log = noopLog, maxSet
       // PLUGIN API v2: the set's interaction windows (docs/PLUGINS.md §10b), handed to its match host and to the
       // rooms' views; [] when the set declares none
       offers: Array.isArray(built.offers) ? built.offers : [],
+      // diagnostic only (server/plugins/chessAudit.js): what the pieces this set adds can do — never hashed
+      ...(built.chessAudit ? { chessAudit: built.chessAudit } : {}),
     };
   }
 
@@ -240,6 +243,8 @@ export function createContentSets({ registry, vanillaData, log = noopLog, maxSet
         log.error?.(`[plugins] content set ${built.cs.slice(0, 8)}: its manifest does not hash to its cs`);
         return { error: ERR.INTERNAL, detail: 'the content set\'s manifest does not hash to its cs' };
       }
+      const pieces = chessAuditLine(set.chessAudit);
+      if (pieces) log.info?.(`${pieces} (content set ${csUrlPart(set.cs)}, ${ids.join(', ')})`);
     }
     const key = csUrlPart(set.cs);
     if (!held.has(key) && full) return busy();

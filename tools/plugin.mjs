@@ -43,6 +43,14 @@ import { GAMEPLAY_RECORD_SURFACE } from '../server/plugins/gameplayRecords.js';
 //                                                        the error catalogue (every code, its plain words, what to do);
 //                                                        --markdown its symptom table, --write puts the tables into
 //                                                        docs/PLUGINS.md (English) and docs/PLUGIN-GUIDE.md (Chinese)
+//   node tools/plugin.mjs audit <id> … [--json]         read the pieces a content plugin adds to a real content set and
+//                                                        say what each one can actually do: whether it can ever enter
+//                                                        the shop (hidden or not visible), which kit runs it (an official
+//                                                        operator's, the plugin's own scripted one, a DSL/SkillSpec, or
+//                                                        the generic kit) and which blackboard numbers it carries.
+//                                                        A piece of the generic kit with no numbers is buyable but its
+//                                                        skill does nothing — that is a pack with logic in its own
+//                                                        server code, which this build never runs (docs/PLUGINS.md §16)
 //   node tools/plugin.mjs install <zip path | https URL> [--sha256 <hex>] [--force]
 //                                                        install into plugins/<id>/. A local zip installs as it is. An
 //                                                        https URL must carry --sha256 (the hash of the zip bytes). The
@@ -75,6 +83,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { buildContentSet } from '../server/plugins/contentSet.js';
+import { ignoredNumbers, scriptKitIds } from '../server/plugins/chessAudit.js';
 import { createPluginRegistry } from '../server/plugins/registry.js';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -100,7 +109,7 @@ import { restartForEnvProxy } from './assets/env-proxy.mjs';
 export { checkPluginFolder, buildPluginLock };
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const USAGE = 'usage: node tools/plugin.mjs list [--json] | check [<dir|id> …] [--strict] [--json] [--lang zh|en] | pack <dir|id> … [--zip] [--out <path>] | new [<template> <id>] [--name … --target … --author … --license … --dir … --options <json-file>] | import-forge <dir|zip> [--out plugins/<id>] [--id <id>] [--dry-run] [--json] [--no-scripts] [--offline|--no-network] [--asset-source=direct|mirror] [--refresh-index] | test <id> | errors [--markdown] [--lang zh|en] [--write] | install <zip|https> [--sha256 <hex>] [--force] | catalog <file|https> [--json] | surface [--write]   [--root <dir>]';
+const USAGE = 'usage: node tools/plugin.mjs list [--json] | check [<dir|id> …] [--strict] [--json] [--lang zh|en] | pack <dir|id> … [--zip] [--out <path>] | new [<template> <id>] [--name … --target … --author … --license … --dir … --options <json-file>] | import-forge <dir|zip> [--out plugins/<id>] [--id <id>] [--dry-run] [--json] [--no-scripts] [--offline|--no-network] [--asset-source=direct|mirror] [--refresh-index] | test <id> | audit <id> … [--json] | errors [--markdown] [--lang zh|en] [--write] | install <zip|https> [--sha256 <hex>] [--force] | catalog <file|https> [--json] | surface [--write]   [--root <dir>]';
 /** The documents whose symptom table `errors --write` keeps: path, language. */
 export const TABLE_DOCS = Object.freeze([['docs/PLUGINS.md', 'en'], ['docs/PLUGIN-GUIDE.md', 'zh']]);
 
@@ -216,6 +225,81 @@ export async function main(argv, io = {}) {
       });
       return r.status ?? 1;
     } finally { fs.rmSync(tmp,{recursive:true,force:true}); }
+  }
+
+  if (cmd === 'audit') {
+    if (!targets.length || targets.some((t) => !isPluginId(t))) {
+      console.error(`plugin: audit needs installed plugin ids (see \`plugin list\`)\n${USAGE}`); return 2;
+    }
+    // The set a room actually gets: the pack plus the room scripts that require it (the client pairs them on its own,
+    // docs/PLUGINS.md §14) — otherwise a pack whose kits live in `kits-<id>` would look like it ran the generic kit.
+    const withRoomScripts = (registry, id) => {
+      const extras = (typeof registry.plugins === 'function' ? registry.plugins() : [])
+        .filter((p) => p.status === 'loaded' && (p.class === 'script' || p.class === 'trusted')
+          && p.manifest?.requires && Object.hasOwn(p.manifest.requires, id))
+        .map((p) => p.id);
+      return [id, ...extras];
+    };
+    const registry = createPluginRegistry(dirs);
+    const rows = [];
+    for (const id of targets) {
+      const p = registry.plugin(id);
+      if (!p) { rows.push({ id, error: 'not installed' }); continue; }
+      if (!['content', 'script', 'meta'].includes(p.class)) { rows.push({ id, error: `a ${p.class} plugin adds no chess` }); continue; }
+      const set = buildContentSet({ registry, ids: withRoomScripts(registry, id) });
+      if (!set.cs) { rows.push({ id, version: p.manifest.version, error: 'the content set does not build', problems: set.problems }); continue; }
+      // Rooms pair a pack with the `kits-<id>` script themselves (docs/PLUGINS.md §14), so audit that same set,
+      // and let the script's registered ids count as own kits (they are not in ContentSet.kitted).
+      const scriptKitted = scriptKitIds(withRoomScripts(registry, id).map((x) => registry.plugin(x)));
+      const kitted = new Set([...(set.kitted ?? []), ...scriptKitted]);
+      // `chess_x_…` is the namespace the Forge importer gives a new body (docs/PLUGINS.md §16); `_b` is its 进阶 form.
+      const pieces = Object.entries(set.data.chess ?? {})
+        .filter(([key]) => key.includes('_x_'))
+        .map(([key, c]) => {
+          const golden = /_b$/.test(key);
+          const kit = c.kitRef != null ? `official:${c.kitRef}` : c.skillSpec != null ? 'skill-spec' : c.dsl != null ? 'dsl'
+            : typeof c.charId === 'string' && kitted.has(c.charId) ? 'own-kit' : 'generic';
+          const bb = [...new Set((Array.isArray(c.skills) ? c.skills : c.skill ? [c.skill] : [])
+            .flatMap((s) => Object.keys(s?.bb ?? {})))];
+          return {
+            id: key, name: c.name ?? '', tier: c.tier ?? null, price: c.price ?? null, golden,
+            inShop: !golden && c.isHidden !== true && c.visible !== false,
+            kit, bb, ignored: kit === 'generic' ? ignoredNumbers(c) : [],
+          };
+        })
+        .sort((a, b) => a.id.localeCompare(b.id, 'en'));
+      rows.push({ id, version: p.manifest.version, cs: set.cs, audit: set.chessAudit ?? null, pieces });
+    }
+    if (flags.has('json')) { console.log(JSON.stringify({ folders: rows }, null, 2)); return 0; }
+    for (const row of rows) {
+      if (row.error) { console.log(`${row.id}: ${row.error}${row.problems ? ` (${row.problems.join('; ')})` : ''}`); continue; }
+      const a = row.audit;
+      console.log(`${row.id} ${row.version} — content set ${row.cs.slice(0, 12)}`);
+      if (a) {
+        const bits = [`${a.added} piece(s) added`, `${a.shop} in the shop`];
+        if (a.golden) bits.push(`${a.golden} 进阶`);
+        if (a.borrowed) bits.push(`${a.borrowed} run an official kit`);
+        if (a.generic) bits.push(`${a.generic} the generic kit`);
+        if (a.shells) bits.push(`${a.shells} carry no skill numbers`);
+        if (a.dropped) bits.push(`${a.dropped} drop numbers no kit reads`);
+        console.log(`  ${bits.join(', ')}`);
+      }
+      const shown = row.pieces.slice(0, 40);
+      for (const piece of shown) {
+        const where = piece.golden ? 'golden' : piece.inShop ? 'shop' : 'never in shop';
+        const nums = piece.bb.length ? `bb ${piece.bb.join(',')}` : 'no bb';
+        console.log(`  ${piece.id.padEnd(44)} ${String(piece.name).padEnd(10)} T${piece.tier ?? '?'} ${piece.price ?? '?'}g  ${where.padEnd(13)} ${piece.kit.padEnd(18)} ${nums}`);
+        if (piece.ignored.length) console.log(`  ${' '.repeat(44)} ↳ dropped by the generic kit: ${piece.ignored.join(', ')}`);
+      }
+      if (row.pieces.length > shown.length) console.log(`  … ${row.pieces.length - shown.length} more (use --json)`);
+      const hidden = row.pieces.filter((x) => !x.golden && !x.inShop).length;
+      const inert = row.pieces.filter((x) => !x.golden && x.kit === 'generic' && !x.bb.length).length;
+      const ignored = row.pieces.filter((x) => x.ignored.length).length;
+      if (hidden) console.log(`  ! ${hidden} piece(s) can never enter the shop (hidden or not visible)`);
+      if (inert) console.log(`  ! ${inert} piece(s) would run the generic kit with no numbers: buyable, but their skill does nothing`);
+      if (ignored) console.log(`  ! ${ignored} piece(s) carry numbers the kit that runs them does not read (see above)`);
+    }
+    return rows.some((r) => r.error) ? 1 : 0;
   }
 
   if (cmd === 'list') {

@@ -16,6 +16,7 @@ import { buildRecordOverlay, walkOverlay, getPath, applyRecordOverlay } from '..
 import { computeGroundPaths, computeDeployTiles } from '../sim/groundPaths.js';
 import { officialKit } from '../sim/content/index.js';
 import { KITTED_CHARS } from '../sim/content/kits/index.js';
+import { chessAudit, scriptKitIds } from './chessAudit.js';
 import { exportOfficialBounds, rememberOfficialBounds } from '../../shared/plugins/officialBounds.js';
 import { browserScriptSources } from '../../shared/plugins/scriptLoad.js';
 import { preflightScripts } from './scriptPreflight.js';
@@ -386,9 +387,13 @@ function composeContentSet({ registry, ids = [], checkDataOnly = false }) {
     const [section, name] = rel.split('/');
     index[section][name.slice(0, -5)] = { url, ...f };
   }
+  // Diagnostic only (server/plugins/chessAudit.js): what the pieces this set adds can actually do. Not part of cs.
+  const kittedIds = [...KITTED_CHARS, ...Object.keys(data.backups.units).filter(id => !own(base.data.backups.units, id))];
+  const audit = chessAudit(data.chess, base.data.chess, { kitted: [...kittedIds, ...scriptKitIds(plugins)] });
   const set = deepFreeze({ cs, vanilla, plugins: plugins.map(p => ({ id: p.id, version: p.manifest.version, hash: p.content.hash })),
     data, files, ...(scripts.length ? {scripts, execution} : {}), ...(rules ? { rules } : {}), modes: Object.values(data.config.modes), problems: [], warnings, index, settings, bounds: boundsSnap,
-    kitted: [...KITTED_CHARS, ...Object.keys(data.backups.units).filter(id => !own(base.data.backups.units, id))],
+    kitted: kittedIds,
+    ...(audit.added ? { chessAudit: audit } : {}),
     // PLUGIN API v2 (docs/PLUGINS.md §10b): the interaction windows the set declares, tagged with their plugin. Data
     // only and already checked by the registry; a set without one omits the field, so nothing downstream changes.
     ...(offers.length ? { offers } : {}) });
