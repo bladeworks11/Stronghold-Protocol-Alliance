@@ -7,7 +7,7 @@
 ![node](https://img.shields.io/badge/node-22%20%7C%2024-339933)
 
 > [!NOTE]
-> **这是一个个人维护的分支（personal build）**：[上游项目](https://github.com/sganggs/Stronghold-Protocol)由 `sganggs` 与贡献者开发，原始代码、文档、规则与数据的功劳都归上游，同样遵循 GPL-3.0。本分支只在上游之上叠加了个人自用的改动——一批本地原创插件、桌面客户端（`desktop/`）、内容同步与若干体验修复，详见 [CHANGELOG.md](CHANGELOG.md)。它不代表上游的发布；遇到问题请先对照上游版本复现，与上游无关的部分再提到这边。
+> **这是一个个人维护的分支（personal build）**：[上游项目](https://github.com/sganggs/Stronghold-Protocol)由 `sganggs` 与贡献者开发，原始代码、文档、规则与数据的功劳都归上游，同样遵循 GPL-3.0。本分支只在上游之上叠加了个人自用的改动——一批插件、桌面客户端（`desktop/`）、内容同步与若干体验修复，详见 [CHANGELOG.md](CHANGELOG.md)。它不代表上游的发布；遇到问题请先对照上游版本复现，与上游无关的部分再提到这边。
 
 ## 声明
 
