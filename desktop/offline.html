@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>卫戍协议：盟约 · 连接中</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid; place-items: center; background: radial-gradient(circle at 50% 30%, #0e1a16, #060a09 70%);
+    color: #d8e3de; font: 16px/1.7 "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  .box { width: min(520px, 82vw); text-align: center; }
+  .dots { width: 96px; height: 96px; margin: 0 auto 22px; display: grid; grid-template-columns: repeat(13, 1fr); gap: 2px; }
+  .dots i { width: 100%; aspect-ratio: 1; border-radius: 50%; background: #cfe0da; opacity: .35; }
+  .dots i.on { opacity: .95; }
+  .dots i.mint { background: #17f9b7; opacity: 1; }
+  h1 { font-size: 20px; letter-spacing: .08em; margin: 0 0 8px; color: #eef7f3; font-weight: 700; }
+  p { margin: 0 0 6px; color: #9fb2ab; font-size: 14px; }
+  code { color: #4ed8af; font-family: ui-monospace, Consolas, monospace; }
+  .actions { margin-top: 26px; display: flex; gap: 12px; justify-content: center; }
+  button, a.btn {
+    appearance: none; cursor: pointer; border: 1px solid #2c4a40; border-radius: 3px;
+    background: #12211c; color: #d8f5e9; padding: 10px 22px; font-size: 14px; text-decoration: none;
+    transition: background .15s, border-color .15s;
+  }
+  button:hover, a.btn:hover { background: #1a2f27; border-color: #3d6a5b; }
+  a.btn.primary { background: #17f9b7; border-color: #17f9b7; color: #04231a; font-weight: 700; }
+  a.btn.primary:hover { background: #4dffcb; }
+  .hint { margin-top: 18px; font-size: 12px; color: #6b807a; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="dots" id="dots" aria-hidden="true"></div>
+    <h1>连不上服务器</h1>
+    <p>客户端在等 <code id="srv">服务器</code> 回应，但没能连上。</p>
+    <p>正在自动重试 —— 服务器恢复后会自动进入游戏。</p>
+    <div class="actions">
+      <a class="btn primary" id="retry" href="#">立即重试</a>
+      <button id="quit">退出</button>
+    </div>
+    <div class="hint">地址在客户端目录的 <code>config.json</code> 里改（<code>server</code> 一行）。</div>
+  </div>
+<script>
+  // 标题画面那枚点阵徽记：13×14，等服务器的时候有个呼吸感
+  const EMBLEM = [
+    'XXX..XXX..XXX', 'XXX..XXX..XXX', 'XXXXXXXXXXXXX', '.XXXXXXXXXXX.',
+    '..XXXXXXXXX..', '..XXXXXXXXX..', '..XXXX.XXXX..', '..XXXX.XXXX..',
+    '..XXXXXXXXX..', '..XXXXXXXXX..', '..XXXXXXXXX..', '.XXXXXXXXXXX.',
+    'XXXXXXXXXXXXX', 'XXXXXXXXXXXXX',
+  ];
+  const ACCENT = new Set(['6,5', '6,7', '7,5', '7,7']);
+  const dots = document.getElementById('dots');
+  const cells = [];
+  EMBLEM.forEach((row, r) => [...row].forEach((ch, c) => {
+    const i = document.createElement('i');
+    if (ch === 'X') {
+      i.className = ACCENT.has(r + ',' + c) ? 'on mint' : 'on';
+      cells.push([i, (r * 13 + c) % 7]);
+    } else {
+      i.style.opacity = '0';
+    }
+    dots.appendChild(i);
+  }));
+  setInterval(() => {
+    const t = Date.now() / 240;
+    cells.forEach(function (pair) {
+      pair[0].style.opacity = String(0.28 + 0.68 * (0.5 + 0.5 * Math.sin(t - pair[1] * 0.7)));
+    });
+  }, 60);
+
+  // 本地页（file://）无法跨源访问服务器，重试交给主进程做；按钮只是把窗口导航回本地代理，
+  // 如果服务器已经恢复，代理会直接返回游戏页面。
+  const params = new URLSearchParams(location.search);
+  const server = params.get('server') || '';
+  const proxy = params.get('proxy') || '';
+  document.getElementById('srv').textContent = server || '服务器';
+  const retry = document.getElementById('retry');
+  retry.href = proxy ? proxy + '/' : '#';
+  document.getElementById('quit').addEventListener('click', () => window.close());
+</script>
+</body>
+</html>

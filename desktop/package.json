@@ -1,0 +1,66 @@
+{
+  "name": "stronghold-protocol-client",
+  "productName": "Stronghold Protocol",
+  "version": "0.3.3",
+  "description": "卫戍协议：盟约 · 桌面客户端（Windows / Linux / macOS）",
+  "main": "main.js",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "portable": "powershell -ExecutionPolicy Bypass -File build/build-portable.ps1",
+    "portable:assets": "powershell -ExecutionPolicy Bypass -File build/build-portable.ps1 -WithAssets -Zip -OutDir dist-assets",
+    "installer": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^44.8.0",
+    "electron-builder": "^26.15.3",
+    "rcedit": "^5.0.1"
+  },
+  "build": {
+    "appId": "protocol.stronghold.client",
+    "productName": "Stronghold Protocol",
+    "copyright": "GPL-3.0-or-later, game art (c) Hypergryph / Yostar",
+    "directories": {
+      "output": "dist-installer",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "offline.html",
+      "config.json",
+      "icon.png",
+      "icon.ico",
+      "icon-256.png",
+      "package.json"
+    ],
+    "extraFiles": [
+      {
+        "from": "icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "shortcutName": "卫戍协议：盟约",
+      "include": "build/installer.nsh",
+      "artifactName": "Stronghold-Protocol-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

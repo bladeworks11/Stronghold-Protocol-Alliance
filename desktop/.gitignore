@@ -1,0 +1,20 @@
+# The desktop wrapper is built from this folder (see README.md): `npm i`, then `npm run build`
+node_modules/
+userdata/
+
+# build outputs: the portable folder, the bundles and the installers (installer payloads are hundreds of MB)
+.build-installer/
+dist/
+dist-assets/
+dist-installer/
+*.exe
+*.zip
+
+# the self-signed code-signing material stays on the machine that signs the installers
+signing/
+*.pfx
+*.cer
+
+# logs and one-off smoke output
+*.log
+electron-smoke.*.txt
