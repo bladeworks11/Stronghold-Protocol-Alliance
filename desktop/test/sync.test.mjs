@@ -30,7 +30,7 @@ function fakeServer() {
     if (req.url === '/sync/manifest.json') {
       const doc = {
         v: 1,
-        app: '0.3.3',
+        app: '0.3.1',
         assets: Object.fromEntries(Object.entries(state.assets).map(([rel, buf]) => [rel, h16(buf)])),
         models: state.models,
         plugins: Object.fromEntries(Object.entries(state.plugins).map(([id, p]) => [id, {
@@ -81,7 +81,7 @@ test('首次同步：下载缺的素材与插件，写好状态', async (t) => {
   const base = await listen(server);
   t.after(() => server.close());
   const dir = await tmpDir();
-  const sync = createContentSync({ dir, server: base, app: '0.3.3' });
+  const sync = createContentSync({ dir, server: base, app: '0.3.1' });
   const r = await sync.run();
   assert.equal(r.ok, true);
   assert.equal(r.fetched, 3);
@@ -102,9 +102,9 @@ test('第二次同步：304，一个文件都不下', async (t) => {
   const base = await listen(server);
   t.after(() => server.close());
   const dir = await tmpDir();
-  await createContentSync({ dir, server: base, app: '0.3.3' }).run();
+  await createContentSync({ dir, server: base, app: '0.3.1' }).run();
   state.hits.length = 0;
-  const r = await createContentSync({ dir, server: base, app: '0.3.3' }).run();
+  const r = await createContentSync({ dir, server: base, app: '0.3.1' }).run();
   assert.equal(r.ok, true);
   assert.equal(r.skipped, true);
   assert.deepEqual(state.hits, ['/sync/manifest.json']);
@@ -115,11 +115,11 @@ test('改过的素材只重下这一份，服务器删掉的从缓存清掉', as
   const base = await listen(server);
   t.after(() => server.close());
   const dir = await tmpDir();
-  await createContentSync({ dir, server: base, app: '0.3.3' }).run();
+  await createContentSync({ dir, server: base, app: '0.3.1' }).run();
   state.assets['assets/char/a.png'] = Buffer.from('png-a-v2');
   delete state.assets['fonts/x.woff2'];
   state.hits.length = 0;
-  const r = await createContentSync({ dir, server: base, app: '0.3.3' }).run();
+  const r = await createContentSync({ dir, server: base, app: '0.3.1' }).run();
   assert.equal(r.ok, true);
   assert.equal(r.fetched, 1);
   assert.equal(r.removed, 1);
@@ -130,7 +130,7 @@ test('改过的素材只重下这一份，服务器删掉的从缓存清掉', as
 
 test('服务器没起来：记 offline，不写坏状态', async () => {
   const dir = await tmpDir();
-  const sync = createContentSync({ dir, server: 'http://127.0.0.1:1', app: '0.3.3' });
+  const sync = createContentSync({ dir, server: 'http://127.0.0.1:1', app: '0.3.1' });
   const r = await sync.run();
   assert.equal(r.ok, false);
   assert.equal(r.offline, true);
@@ -146,7 +146,7 @@ test('安装包里已有同样字节的文件：不下载，记成已具备', as
   await fs.mkdir(path.join(bundleAssets, 'char'), { recursive: true });
   await fs.writeFile(path.join(bundleAssets, 'char', 'a.png'), 'png-a');
   const sync = createContentSync({
-    dir, server: base, app: '0.3.3',
+    dir, server: base, app: '0.3.1',
     bundle: { assetsDir: bundleAssets, pluginsDir: null, indexFile: null },
   });
   state.hits.length = 0;
@@ -166,7 +166,7 @@ test('Spine 模型哈希：认得成员文件，不认识的哈希不认', async
   state.models = [['modelhash0000000', 'assets/char/m.skel', 'assets/char/m.atlas']];
   state.assets['assets/char/m.skel'] = Buffer.from('skel');
   state.assets['assets/char/m.atlas'] = Buffer.from('atlas');
-  const sync = createContentSync({ dir, server: base, app: '0.3.3' });
+  const sync = createContentSync({ dir, server: base, app: '0.3.1' });
   await sync.run();
   assert.equal(sync.isAssetModelHash('assets/char/m.skel', 'modelhash0000000'), true);
   assert.equal(sync.isAssetModelHash('assets/char/m.atlas', 'modelhash0000000'), true);

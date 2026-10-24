@@ -1,7 +1,7 @@
 // 生成「包内清单」（bundle-index.json）：客户端把这个文件放到安装包里，启动时的内容同步据此判断
 // 「服务器上的这个文件我包里已经有一份一样字节的」→ 不用下载。
 //
-//   node build/make-bundle-index.mjs --assets <dir> --fonts <dir> --plugins <dir> --out <file> [--app 0.3.3]
+//   node build/make-bundle-index.mjs --assets <dir> --fonts <dir> --plugins <dir> --out <file> [--app 0.3.1]
 //
 // 字段与服务端的 /sync/manifest.json 对齐：
 //   assets  → { 'assets/<相对路径>': 内容 SHA-256 前 16 位 }，fonts 同理用 'fonts/' 前缀
@@ -72,7 +72,7 @@ async function pool(items, jobs, worker) {
 
 const args = parseArgs(process.argv.slice(2));
 if (!args.out) {
-  console.error('用法: node make-bundle-index.mjs --assets <dir> [--fonts <dir>] [--plugins <dir>] --out <file> [--app 0.3.3]');
+  console.error('用法: node make-bundle-index.mjs --assets <dir> [--fonts <dir>] [--plugins <dir>] --out <file> [--app 0.3.1]');
   process.exit(2);
 }
 
