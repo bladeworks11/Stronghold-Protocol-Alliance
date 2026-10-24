@@ -1,7 +1,7 @@
 {
   "name": "stronghold-protocol-client",
   "productName": "Stronghold Protocol",
-  "version": "0.3.3",
+  "version": "0.3.1",
   "description": "卫戍协议：盟约 · 桌面客户端（Windows / Linux / macOS）",
   "main": "main.js",
   "private": true,
