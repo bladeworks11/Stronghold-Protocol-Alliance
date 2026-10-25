@@ -729,9 +729,10 @@ export function LobbyScreen() {
   // 独立模拟: at the difficulty picked on 选择模拟协议; 创建同盟: at the remembered one, changed in the room by the host
   // (`version`: the lobby's, only when welcome.versions is present — protocol §4; omitted when the server offers 第二期下半 alone)
   const create = (mode) => run('create', () => net.request('room.create', {
-    mode, difficulty: mode === 'solo' ? shownSolo : shownCoop, ...(mode === 'coop' ? { capacity } : {}),
-    ...(testMode && asTest ? { test: true } : {}), ...(versions ? { version } : {}),
+    mode, difficulty: mode === 'solo' ? shownSolo : shownCoop, ...(testMode && asTest ? { test: true } : {}), ...(versions ? { version } : {}),
     ...(mode === 'solo' && soloFree && soloTimed === true ? { soloUnlimited: true } : {}),
+    // capacity: a co-op room's seat count (ROOM_CAPACITIES, the host's pick in 选择同盟方式; protocol room.create.capacity)
+    ...(mode === 'coop' ? { capacity } : {}),
   }));
   const join = (c = code) => {
     // `onClick=${join}` hands the click EVENT as the first argument, and a default parameter only applies to
@@ -810,8 +811,7 @@ export function LobbyScreen() {
     ${allyOpen ? html`<${AllianceSelect} onClose=${() => setAllyOpen(false)} onCreate=${() => create('coop')} difficulty=${shownCoop}
       code=${code} onCode=${(v) => setCode(normalizeCode(v))} codeOk=${codeOk} online=${online} busy=${busy}
       onJoin=${join} onSpectate=${spectate} recent=${recent} marks=${marks} focusKey=${!coarse}
-      testMode=${testMode} asTest=${asTest} onTest=${setAsTest} short=${shortScreen}
-      capacity=${capacity} onCapacity=${pickCapacity} />` : null}
+      testMode=${testMode} asTest=${asTest} onTest=${setAsTest} capacity=${capacity} onCapacity=${pickCapacity} short=${shortScreen} />` : null}
     ${soloOpen ? html`<${ProtocolSelect} roomMode="solo" difficulty=${shownSolo} onDifficulty=${pickDifficulty}
       onClose=${() => setSoloOpen(false)} onCreate=${() => create('solo')} busy=${busy} online=${online}
       testMode=${testMode} asTest=${asTest} onTest=${setAsTest} difficulties=${solo} loading=${versionLoading} failed=${versionFailed}

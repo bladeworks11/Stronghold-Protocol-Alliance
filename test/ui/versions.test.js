@@ -128,6 +128,8 @@ test('the client renders no research texts of the data (spec / implFormula / how
   }
   // the one allowed: 突变细胞's rule line (data/items.json `note`, tools/build-data.mjs ITEM_RULES — a corrected Chinese rule,
   // the same in every version's build), shown on the detail card on purpose
-  const allowed = (h) => /^public\/js\/ui\/detailPanel\.js:\d+: \$\{item\.note \?/.test(h);
+  const allowed = (h) => /^public\/js\/ui\/detailPanel\.js:\d+: \$\{item\.note \?/.test(h)
+    // the fork's note VFX (丰川祥子's 音符): `e.note` is a note handle in the battle VFX stream, not a data record's text
+    || (/^public\/js\/render\/vfx\/wiring\.js:\d+: /.test(h) && /\b(e\.note|this\.notes|_noteYaw|_notePlace)\b/.test(h));
   assert.deepEqual(hits.filter((h) => /\.(implFormula|howToPlay|note)\b/.test(h) && !allowed(h)), [], 'no research text is read');
 });
