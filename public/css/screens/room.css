@@ -162,7 +162,7 @@
   min-height: 0;
   display: flex;
   align-items: stretch;
-  justify-content: center;
+  justify-content: safe center;
   gap: max(.3rem, 2.2vw);
   padding: .3rem .4rem .1rem;
   overflow-x: auto;
@@ -170,7 +170,9 @@
   scrollbar-width: thin;
 }
 .rseat {
-  --w: min(18vw, 3.4rem, calc((100vw - 1.6rem) / var(--n, 4) - .3rem));
+  /* A 16-20 seat room (fork capacity) divides the viewport into slivers: the card keeps a readable floor and the row
+     scrolls sideways instead of squeezing the invite text into two clipped characters. */
+  --w: max(1.5rem, min(18vw, 3.4rem, calc((100vw - 1.6rem) / var(--n, 4) - .3rem)));
   position: relative;
   flex: none;
   width: var(--w);
