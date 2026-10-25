@@ -338,22 +338,21 @@ describe('UI: one countdown and the highlighted band (user playtest #4 item 4)',
     m.dispose();
   });
 
-  test('the order rows scroll in their own box, so 查看禁用盟约与干员 stays at the bottom (6–20 seats)', () => {
-    // a room at capacity puts twenty rows in the left column: they must scroll (.draft-order__list) instead of pushing
-    // the 本局信息 entry past the bottom of the screen (player report 2026-10-15)
+  test('the order rows scroll in their own box, so 查看禁用盟约与干员 stays reachable (6–20 seats)', () => {
+    // a room at capacity puts twenty rows in the left column: they must scroll instead of pushing 本局信息 off-screen
+    // (player report 2026-10-15). Upstream 0.3.3's redesign scrolls them in `.draft-order__rows` and moves the entry
+    // into the step header (`.stephead__info`); the fork's `.draft-order__list` box went away with its markup.
     const src = readFileSync(new URL('../../public/js/screens/bandDraft.js', import.meta.url), 'utf8');
-    const list = src.match(/<div class="draft-order__list">([\s\S]*?)<\/div>\n\s*<\$\{Button\}/);
-    assert.ok(list, 'the order rows live in their own container, right above the 本局信息 button');
-    assert.match(list[1], /class=\$\{cx\('dorder'/, 'the rows are inside it');
-    assert.doesNotMatch(list[1], /查看禁用盟约与干员/, 'the button is NOT inside the scrolling box');
-    assert.match(src, /<div class="draft-order__list">[\s\S]*<\/div>\s*<\$\{Button\}[^>]*data-testid="match-info-open"/,
-      'the button follows the scrolling box, so it is laid out at the bottom of the column');
+    const list = src.match(/<div class="draft-order__rows">([\s\S]*?)<\/div>/);
+    assert.ok(list, 'the order rows live in their own container');
+    assert.match(list[1], /<\$\{OrderRow\}/, 'the rows are inside it');
+    assert.doesNotMatch(list[1], /match-info-open/, 'the 本局信息 button is NOT inside the scrolling box');
+    assert.match(src, /data-testid="match-info-open"/, 'the entry still exists (in the step header)');
     const css = readFileSync(new URL('../../public/css/screens/draft.css', import.meta.url), 'utf8');
-    const rule = css.match(/\.draft-order__list \{([^}]*)\}/);
-    assert.ok(rule, '.draft-order__list is styled');
-    assert.match(rule[1], /overflow-y: auto/, 'the rows scroll');
+    const rule = css.match(/(?:^|\n)\.draft-order__rows \{([^}]*)\}/);
+    assert.ok(rule, '.draft-order__rows is styled');
+    assert.match(rule[1], /overflow: auto/, 'the rows scroll');
     assert.match(rule[1], /min-height: 0/, 'and may shrink below their content (a flex item would otherwise win)');
-    assert.match(rule[1], /flex: 1 1 auto/, 'the box takes the space the button and the tip leave');
-    assert.match(css, /\.draft-order__info \{[^}]*flex: none/, 'the button itself never shrinks');
+    assert.match(rule[1], /flex: 1/, 'the box takes the space the header and the tip leave');
   });
 });
