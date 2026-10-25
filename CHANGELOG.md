@@ -1,7 +1,6 @@
 ## 未发布
 
 ### 新增
-- 插件里「每叠加 N 层就变强」这类特质也接进战斗了：`COL_EQUIP_BASE_BY_BOND_LAYER`（每 N 层加装备数值、攻击速度随携带装备数提升，引擎把装备并进干员属性，所以加成落在属性上）、`custom_scale_bonds_layers`（每 N 层 +攻击力）、`act_gar_eff_takenReduceByBond`（每 N 层受到的伤害降低，最低 5 %）会随层数变化实时重算；`COL_SHIELD_AND_SKILL_LAYER` 在开战时给自身与周围八格发护盾层（每 N 层哥伦比亚追加一层），开技能时给周围八格加层（至多 `max` 次）。复制与额外触发也做了：`SERVER_COPY_FRONT_EFFECT_BATTLE` 让干员把自己身前几格干员的战斗内特质当作自己的来跑；`SERVER_EXTRA_TRIGGER_BATTLE_EFFECT`、`AVEMUJICA_EXTRA_TRIGGER` 让其他干员触发的特质多触发 `extra_trigger` 次（每个特质每名干员至多 `max_count` 次），丰川祥子触发时还给全体颂乐人偶加 `partner_layers` 层（原文「每回合 1 次」，战斗没有回合，按每场 1 次处理，[ASSUMED]）。`COL_DEPLOY_LAYER_NOREDEPLOY_EQUIP` 只发层数：战斗结束无法把装备交回备战期，`item_tier` 忽略。官方内容不受影响，golden 的 46 / 22 / 21 / 10 / 151 个场景全部一致。
 - 插件干员在战斗里的「加层」类特质现在真的生效了：卡兹戴尔、哥伦比亚、ave mujica 等包的 `custom_gain_first_skill`、`custom_gain_on_skill`、`custom_gain_on_heal`、`custom_gain_on_hurt_or_heal`、`custom_gain_on_kills`、`custom_gain_on_controlled`、`act_gar_event_onhurt_add_bond_layer`、`AVEMUJICA_FEVER_KILL`、`COL_START_OWN_BOND_NOACT`、`COL_DEPLOY_LAYER_NOREDEPLOY_EQUIP`、`COL_SKILL_SELF_FRONT_LAYER` 现在按各自黑板（`gain`／`layer`／`count`／`kill_layers`，`max_count` 封顶）在技能、治疗、受击、击杀、被控、部署、开战时给已激活的盟约加层；记录里没写盟约 id 时加在携带者自己的盟约上（[ASSUMED]）。以前这些只有卡片上的一行字。其余没实现的特质仍是只读文本，导入报告与 `[sim] … uses …` 日志会点名。并入 0.3.3 后 golden 也按新内容重算了一遍（diy 151 / standins 10 / matches 21 个场景全部一致，差异只来自内容本身）。
 - 房间插件面板把成对的包一起勾：勾选内容插件时会同时勾上它 `optional` 里点名、房间可用的配套外观（`scope` 含 `room` 的 `-look` 包）。以前房主要自己记得勾两次，只勾内容包时新干员能上阵但立绘、模型和语音是空的。取消内容插件时这套外观一起取消——另一个已启用的内容插件也点名同一套外观时保留；纯个人的配套外观不受影响，仍由每位博士在「设置 → 外观插件」里自己开关，面板照旧提示。规则为 [ASSUMED]，只改房主的勾选，不改服务端的解析与加载顺序。
 - 房间插件面板把同名的行排在一起、并说清是哪一种：一个包常常是三条——内容（数据）、`kits-*` 行为脚本、`-look` 外观，原来按插件 id 排，三行散在列表各处，看着像装重复了。现在按显示名分组，组内按 数据 → 脚本 → 外观 排；只有重名时才在名字后面用小字标出「· 数据/脚本/外观」。勾选内容插件时连它的 `kits-*` 脚本一起勾上（脚本的 `requires` 指向该内容包、`scope` 含 `room`、本服务器上状态为已加载时才带），取消时一起取消；单独勾脚本不带别的、已勾的不会被重复推入。规则为 [ASSUMED]，只改房主的勾选与列表顺序，不动服务端的解析与加载顺序。
@@ -14,8 +13,6 @@
 - 潘格尼尼【定制铳械】改为**等概率**：累计花满 55 资金后，从 6 名符合条件的拉特兰干员（4 阶及以上的精锐）里各 1/6 抽取。原先按共享卡池的副本数加权（两位 4 阶合计约 54%，莫斯提马单人就约 1/3），玩家连续抽到同一个人的观感很差；官方文本只写「随机」，`data/choices.json` 的 `pool_char_later` 本身标为 `[ASSUMED]`。只改这一个池子，其余奖励池仍按卡池副本数抽取。golden `solo-HARD-9-boosted` 随之更新（随机序列的消耗方式变了）。
 
 ### 修复
-
-- 丰川祥子的音符在追踪移动中会绕着敌人转圈、始终不掉血：到达判定从「一帧一步」改为「捕获半径 0.35 格」，并在贴近目标时直接转向正对、追踪同一目标超过 10 s 也必定命中；golden 的 diy-145/146 两个祥子场景同步重算。
 - 插件特质里有四条通用写法现在真的生效了（以前只有文字）：哥伦比亚「每携带1件装备使已激活层数+N」（`COL_ADD_BOND_BY_EQUIP_COUNT`）、哥伦比亚「获得一件阶级等于调度中心的随机装备」（`COL_GAIN_RANDOM_EQUIP`）、雷姆必拓「场上每有1名不同【雷姆必拓】干员使所有【雷姆必拓】已激活层数+N」（`SERVER_ADD_ACT_BOND_LAYER_BY_BOARD_BOND_CHAR`）、卡兹戴尔「场上每有1名不同阶的【罗德岛】干员使已激活层数+N」（`custom_gain_layers_prep_end_by_tiers`）。它们都按记录自带的 `bb`/`bbStr`（数值与盟约 id）走官方同一套加层规则；记录没写盟约 id 时不猜、直接不触发 [ASSUMED]。
 - 房间里启用玩法内容插件后，左下角的「作战统计」按钮与「AI 协作」面板不再消失：两者此前一律按「非原版房间」隐藏。作战统计现在只在内容集带**脚本**插件时隐藏（那种集合在 Worker 里跑，取不到伤害数据），只改数据/数值/美术的合集照常可用；AI 协作则整场都可申请，接替只是把 AI 席位换成本人（资金、阵容、分组都跟着席位走，与内容集无关）。`room.aiVote` 拒绝的回执文案同步改为「AI 接替需要在对局开始前申请」。
 - 启用带盟约的插件后，盟约文字里写明的「获得1件…」「进入休整期时获得1件随机阶级的进阶装备」不发放：插件盟约的黑板（`item_id`、`power_bond_char_cnt`、`ex_bond_char_cnt`、`golden_item_max_tier`）以前只被当成“读不懂的键”丢掉。现在 `server/sim/content/bonds/plugin.js` 为每个写了 `item_id` 的插件盟约注册一个休整期发放器：激活时按 `power_bond_char_cnt`、成员达到 `ex_bond_char_cnt` 后各发一次，此后每次进入休整期再发一件随机进阶装备；同一里程碑只记一次账（失败不占名额）。包里点名的装备本版本没有时（哥伦比亚的「源石辅助仪」`chess_item_6_13_e_a` 就属于这种，本版本装备表只到 `6_11`），按同阶随机进阶装备发放并在日志里说明一次 [ASSUMED]。战斗侧另按文本补上「携带装备数量×atk_per_item」的攻击力项，`extra_carry` 计入携带数。

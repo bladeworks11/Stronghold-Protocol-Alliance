@@ -119,14 +119,6 @@ const NOTE_CHASE_MARGIN = 0.5;
 const NOTE_FX_EVERY = 0.12;
 /** Loop-cap: notes one unit may have in the air at once (her cadence and the vanish rules keep the real count far below). */
 const NOTE_CAP = 64;
-/**
- * The radius a note lands inside, however slowly it managed to turn onto its target. A homing note that lands only on
- * the one-step test can settle into a tight orbit (its turning circle is wider than a step), circling the enemy for the
- * rest of the stage and dealing nothing — 「音符环绕在敌人边上不进行伤害」. Landing within this radius closes that.
- */
-const NOTE_CAPTURE = 0.35;
-/** Longest a note chases one target before it lands on it anyway (s); a target her notes can never catch still gets hit. */
-const NOTE_MAX_TRACK = 10;
 /** The team power of 【Ave Mujica】 in the data (`backups.json diy.operators[charId].powers`; PRTS 术语 Ave Mujica). */
 const MUJICA_POWER = 'mujica';
 /**
@@ -566,7 +558,7 @@ export default {
         } else if (n.state === 'track') {
           const t = n.tgt;
           if (!validFoe(unit, t)) {   // 目标丢失: 以当前运动方向重新进入【自由移动】
-            n.state = 'free'; n.tgt = null; n.freeAt = battle.time; n.updAt = battle.time + p.upd; n.trackAt = null;
+            n.state = 'free'; n.tgt = null; n.freeAt = battle.time; n.updAt = battle.time + p.upd;
           } else {
             const ddx = t.x - n.x, ddy = t.y - n.y, d = hypot(ddx, ddy);
             // 追踪移动 closes on its target even when the target is the faster one: a homing speed at or below the
@@ -574,20 +566,16 @@ export default {
             // arrival test below never sees it), so the target's move speed (moveSpeed × MOVE_SCALE tiles/s,
             // server/sim/constants.js) is a floor under the tracking speed.
             const step = Math.max(p.track, (t.s.moveSpeed ?? 0) * MOVE_SCALE + NOTE_CHASE_MARGIN) * dt;
-            const capture = Math.max(step, NOTE_CAPTURE);
             if (d > EPS) {   // 转向速度: dir ← dir × (1 − turn) + target × turn (one frame per tick)
               // Inside one frame's turning circle (step / turn) the lag can only point the note around the target: it
               // settles into a 0.1–0.75 tile orbit the one-step arrival test never catches, so a note that close turns
               // straight onto its target instead of trailing it for ever.
-              const turn = d <= capture * 2 + EPS ? 1 : p.turn;
+              const turn = d <= step / p.turn + EPS ? 1 : p.turn;
               const nx = n.dx * (1 - turn) + (ddx / d) * turn, ny = n.dy * (1 - turn) + (ddy / d) * turn;
               const m = hypot(nx, ny);
               if (m > EPS) { n.dx = nx / m; n.dy = ny / m; }
             }
-            // 到达判定: inside the capture radius, or after chasing one target too long (a note that can never catch a
-            // dashing target must still hurt it, not orbit it for ever).
-            n.trackAt ??= battle.time;
-            if (bodyDist(t, n.x, n.y) <= capture + EPS || battle.time - n.trackAt >= NOTE_MAX_TRACK - EPS) {   // arrived
+            if (bodyDist(t, n.x, n.y) <= step + EPS) {   // arrived
               hitNote(battle, unit, n, t);
               if (n.passby > 0) { n.state = 'hit'; n.hitAt = battle.time; n.hits = new Set([t.id]); }
               else { dropNote(battle, unit, list, i); continue; }
@@ -603,7 +591,7 @@ export default {
           if (battle.time >= n.updAt - EPS) {   // 每隔一段时间按照规则尝试更新行动状态
             n.updAt = battle.time + p.upd;
             if (!n.tgt) n.tgt = seekFoe(battle, unit, n.x, n.y, p.seek);
-            if (n.tgt && battle.time - n.freeAt >= p.minFree - EPS && validFoe(unit, n.tgt)) { n.state = 'track'; n.trackAt = battle.time; }
+            if (n.tgt && battle.time - n.freeAt >= p.minFree - EPS && validFoe(unit, n.tgt)) n.state = 'track';
           }
           // 音符位于自身攻击范围外时，若连续 vanishDelay s 以上不存在追踪目标则消失
           if (!n.tgt && !inOwnRange(unit, n.x, n.y)) {

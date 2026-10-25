@@ -148,9 +148,7 @@ test('追踪移动: every note lands on a foe that keeps walking (a turn-lagged 
     assert.ok(hits.length >= 8, `${key}: her notes landed (${hits.length})`);
     for (const c of hits) assert.equal(c.target, foe, `${key}: every note landed on the walking foe`);
     assert.ok(alive <= 2, `${key}: no note is left orbiting it (${alive} in the air)`);
-    // `first` counts a note once even when it is a 已命中 one that hurts several foes, so compare as a lower bound: a
-    // note that vanished without ever landing would leave the hits short of the flights counted.
-    assert.ok(hits.length >= first.size - 1, `${key}: every note played landed or is still in the air (${hits.length} hits, ${first.size} flights)`);
+    assert.equal(hits.length + alive, first.size, `${key}: every note played landed or is still in the air`);
     assert.ok(maxLife < 5, `${key}: the longest flight is ${maxLife.toFixed(2)} s`);
     done(h);
   }
