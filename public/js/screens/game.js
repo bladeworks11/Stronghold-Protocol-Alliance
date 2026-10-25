@@ -277,10 +277,13 @@ function MatchScreen() {
   useEffect(() => onRefreshBusy(setRefreshBusy), []);
   const [rewardMin, setRewardMin] = useState(false);
   // 作战统计 (battle/metrics.js): a client-only local damage/healing panel — never uploaded to the server.
-  // Off unless the setting is on. A gameplay-plugin room (modRoom: content.vanilla === false) is simulated in a
-  // Worker, which has no damaged/heal data, so the button stays hidden. The hud.right ui-slot is not this gate.
+  // Off unless the setting is on. A gameplay-plugin set that carries a script plugin (class `script`) is simulated in
+  // a Worker and has no damaged/heal data, so the button stays hidden there; a data-only gameplay set (records,
+  // numbers, art) runs in the page's own Battle and keeps the meter, exactly as on the original content
+  // (battle/runner.js `csRunsInPage`). The hud.right ui-slot is not this gate.
+  const pluginScripts = useStore((s) => (s.room?.content?.plugins ?? []).some((p) => p?.class === 'script'), (a, b) => a === b);
   const [metricsOpen, setMetricsOpen] = useState(false);
-  const showMetrics = metricsSetting && !modRoom && !spectator;
+  const showMetrics = metricsSetting && !spectator && !pluginScripts;
   useEffect(() => { if (!showMetrics) setMetricsOpen(false); }, [showMetrics]);
   const [emoteOpen, setEmoteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);

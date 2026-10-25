@@ -698,7 +698,8 @@ test('settings expose 作战统计 off by default and the match hides the button
   assert.match(logic, /combatMetrics: false/);
   assert.match(settings, /label=\$\{t\('作战统计'\)\} micro="COMBAT STATS" value=\$\{s\.combatMetrics\}/);
   assert.match(game, /setCombatMetrics\(s\?\.combatMetrics === true\)/);
-  assert.match(game, /const showMetrics = metricsSetting && !modRoom && !spectator/);
+  assert.match(game, /const pluginScripts = useStore\(\(s\) => \(s\.room\?\.content\?\.plugins \?\? \[\]\)\.some\(\(p\) => p\?\.class === 'script'\)/);
+  assert.match(game, /const showMetrics = metricsSetting && !spectator && !pluginScripts/);
   assert.match(game, /data-ui-slot="hud\.right"/);
   const state = { me: {}, room: null, match: { public: null, battle: null }, connection: { status: 'online' } };
   const line = (s) => buildDiagnostics({ state, env: {}, settings: s }).split('\n').find((l) => l.startsWith('settings:'));

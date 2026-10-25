@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setGameData } from '../../server/sim/content/support/index.js';
-import { bondMods, unreadKeys, install } from '../../server/sim/content/bonds/plugin.js';
+import { bondMods, carriedTerms, itemPlan, registerAuthoredMeta, unreadKeys, install } from '../../server/sim/content/bonds/plugin.js';
 
 const BOND = 'bond_x_demo_lit';
 const REC = {
@@ -64,7 +64,43 @@ test('bondMods: a blackboard with no stat field yields null (nothing to apply)',
 
 test('unreadKeys: the behavioural half is reported, not silently dropped', () => {
   const keys = unreadKeys(REC).sort();
-  assert.deepEqual(keys, ['base_prob', 'power_bond_char_cnt']);
+  assert.deepEqual(keys, ['base_prob']);
+});
+
+test('unreadKeys: the item fields are read now (item grants and the carry ATK term)', () => {
+  const rec = { bondId: 'bond_x_demo_items', buffs: [{ key: 'env_gbuff_new', bb: { item_id: 'chess_item_1_1', ex_bond_char_cnt: 6, golden_item_max_tier: 'shop', atk_per_item: 0.2, extra_carry: 1 } }] };
+  assert.deepEqual(unreadKeys(rec), []);
+  assert.equal(bondMods(rec, 0), null, 'no stat field, no battle buff');
+});
+
+test('carriedTerms: own items + the extra carry the bond grants, ATK% per carried item grows with layers', () => {
+  const rec = { bondId: 'bond_x_demo_carry', buffs: [{ key: 'env_gbuff_new', bb: { atk_per_item: 0.2, atk_per_item_per: 0.001, extra_carry: 1, extra_carry_per_layer: 50 } }] };
+  assert.deepEqual(carriedTerms(rec, 0), { extra: 1, perItem: 0.2 });
+  const t100 = carriedTerms(rec, 100);
+  assert.equal(t100.extra, 3);
+  assert.equal(t100.perItem.toFixed(6), '0.300000');
+  assert.equal(carriedTerms({ bondId: 'bond_x_demo_plain' }, 0), null);
+});
+
+test('itemPlan: the granted item, its member thresholds and the tier cap of the per-prep gift', () => {
+  const rec = { bondId: 'bond_x_demo_plan', buffs: [{ key: 'env_gbuff_new', bb: { item_id: 'chess_item_6_13_e_a', power_bond_char_cnt: 3, ex_bond_char_cnt: 6, golden_item_max_tier: 'shop' } }] };
+  assert.deepEqual(itemPlan(rec), { itemId: 'chess_item_6_13_e_a', firstAt: 3, highAt: 6, maxTier: 6 });
+  assert.equal(itemPlan({ bondId: 'bond_x_demo_noitem' }), null);
+});
+
+test('registerAuthoredMeta: one handler per authored bond that pays an item, none for plain or official bonds', () => {
+  const gd = {
+    bondIds: ['bond_x_demo_plan', 'bond_x_demo_plain', 'columbiaShip'],
+    bonds: {
+      'bond_x_demo_plan': { bondId: 'bond_x_demo_plan', buffs: [{ key: 'env_gbuff_new', bb: { item_id: 'i1', power_bond_char_cnt: 3 } }] },
+      'bond_x_demo_plain': { bondId: 'bond_x_demo_plain', buffs: [{ key: 'env_gbuff_new', bb: { base_atk: 0.1 } }] },
+      columbiaShip: { bondId: 'columbiaShip', buffs: [{ key: 'env_gbuff_new', bb: { item_id: 'i2' } }] },
+    },
+    bond: (id) => gd.bonds[id] ?? null,
+  };
+  const registry = { bond: (id, h) => { registry.regs.push([id, h]); }, regs: [] };
+  assert.equal(registerAuthoredMeta(registry, gd), 1);
+  assert.equal(registry.regs[0][0], 'bond_x_demo_plan');
 });
 
 test('install: members get one persistent buff per authored bond, refreshed on deploy and layer gain', () => {

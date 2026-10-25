@@ -149,11 +149,10 @@ test('handover preserves negotiated deltas and cancels only the inherited seat r
   assert.equal(m._rehearsalTasks.has('other'), true);
 });
 
-for (const kind of ['plugin', 'hosted', 'historical']) {
+for (const kind of ['hosted', 'historical']) {
   test(`takeover refuses ${kind} matches even with an enabled room flag`, async t => {
     const { room, m, late } = await fixture(t);
     const oldContent = room.content, oldVersion = room.version;
-    if (kind === 'plugin') room.content = { ...room.content, vanilla: false };
     if (kind === 'hosted') m.hosted = true;
     if (kind === 'historical') room.version = 'act1autochess';
     try {
@@ -161,3 +160,16 @@ for (const kind of ['plugin', 'hosted', 'historical']) {
     } finally { room.content = oldContent; room.version = oldVersion; m.hosted = false; }
   });
 }
+
+// A gameplay-plugin room plays a content set, but a handover only rewrites who owns a bot seat (the seat keeps its
+// own funds, lineup and grouping), so the same spectator can take that seat over in a plugin room too.
+test('takeover works in a gameplay-plugin room', async t => {
+  const { room, m, late } = await fixture(t);
+  const oldContent = room.content;
+  room.content = { ...room.content, vanilla: false, cs: 'a'.repeat(64), plugins: [{ id: 'big-numbers', version: '1.0.0', class: 'content' }] };
+  try {
+    const bot = m.order[2];
+    assert.equal((await late.request({ t: 'room.aiRequest', botId: bot.playerId })).t, 'ok');
+    assert.equal(room.aiTakeoverVotes.length, 1);
+  } finally { room.content = oldContent; }
+});
