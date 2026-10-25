@@ -459,6 +459,59 @@ H.SERVER_FRONT_SAME_EFFECT_PREP_START = {
   run(ctx) { copyFront(ctx, 'SERVER_PREP_START', 'SERVER_FRONT_SAME_EFFECT_PREP_START'); },
 };
 
+// ---- Forge packs' own prep trait keys ---------------------------------------------------------------------------
+// The Forge packs ship their traits with their own effect keys (COL_*, custom_*, a few workshop SERVER_* names). The
+// engine cannot run the packs' server code, so the common shapes below are mapped onto the same layer rules the official
+// keys use: the pack's bb/bbStr carries the numbers and the bond id, exactly like an official garrison record.
+// [ASSUMED] Every handler uses the bond the record names; a record without one is a no-op instead of guessing a bond.
+const PLUGIN_BOND = (ctx) => ids(ctx.source.bbStr.bond ?? ctx.source.bbStr.bond_id);
+const carriedItems = (p) => (Array.isArray(p?.items) ? p.items.length : 0);
+
+/** `<休整期结束时>自身每携带1件装备，使已激活的【X】层数+N` (哥伦比亚 耶拉 / 白面鸮 …). */
+H.COL_ADD_BOND_BY_EQUIP_COUNT = {
+  run(ctx) {
+    const me = selfView(ctx);
+    if (!me) return;
+    const n = carriedItems(me) * num(ctx.source.bb.count, 1);
+    addAll(ctx, PLUGIN_BOND(ctx), n, true);
+  },
+};
+
+/** `<进入休整期时>场上每有1名不同的【X】干员，使所有【X】干员已激活的层数+N（不会重复触发同一盟约）`. */
+H.SERVER_ADD_ACT_BOND_LAYER_BY_BOARD_BOND_CHAR = {
+  run(ctx) {
+    const bonds = PLUGIN_BOND(ctx);
+    if (!bonds.length) return;
+    const seen = new Set();
+    for (const p of chessOnBoard(ctx)) {
+      if (metaBonds(ctx, p).some((b) => bonds.includes(b))) seen.add(p.id);
+    }
+    addAll(ctx, bonds, seen.size * num(ctx.source.bb.count, 1), true);
+  },
+};
+
+/** `<休整期结束时>场上每有1名不同阶的【X】干员，使已激活的【X】层数+N` (卡兹戴尔 逻各斯 …). */
+H.custom_gain_layers_prep_end_by_tiers = {
+  run(ctx) {
+    const bonds = PLUGIN_BOND(ctx);
+    if (!bonds.length) return;
+    const tiers = distinctTiers(ctx, (p) => metaBonds(ctx, p).some((b) => bonds.includes(b)));
+    addAll(ctx, bonds, tiers.size * num(ctx.source.bb.gain, 1), true);
+  },
+};
+
+/** `<获得时>获得一件阶级等于调度中心的随机（进阶）装备` (哥伦比亚 娜斯缇 …). */
+H.COL_GAIN_RANDOM_EQUIP = {
+  run(ctx) {
+    const n = Math.min(10, num(ctx.source.bb.count, 1));
+    const maxTier = ctx.shopLevel();
+    for (let i = 0; i < n; i++) {
+      const id = ctx.rollItem({ maxTier });
+      if (id) ctx.grantItem(id);
+    }
+  },
+};
+
 
 /** effectKey → handler (the registered objects). */
 export const HANDLERS = Object.freeze(H);
