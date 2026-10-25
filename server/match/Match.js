@@ -233,6 +233,8 @@ import { MatchWatch } from './match/watch.js';
 import { MatchIntents } from './match/intents.js';
 import { MatchPause } from './match/pause.js';
 import { MatchPhases } from './match/phases.js';
+import { registerAuthoredMeta } from '../sim/content/bonds/plugin.js';
+import { reportUnimplementedTraits } from './pluginTraits.js';
 import { MatchSetupVote } from './match/setupVote.js';
 import { MatchSpDraft } from './match/spDraft.js';
 import { MatchPrep } from './match/prep.js';
@@ -331,6 +333,10 @@ export class Match {
     this.ownsScheduler = !opts.scheduler;
     this.sched = opts.scheduler || new RealScheduler({ now: opts.now || Date.now, onError: (e) => this.reportError('timer', e) });
     this.registry = opts.registry || getDefaultRegistry();
+    /** 插件盟约的物品发放（bonds/plugin.js）：按本次对局数据注册，包里没写 item_id 的盟约不受影响 */
+    this.authoredBondMetas = registerAuthoredMeta(this.registry, this.gd);
+    /** 插件特质里本引擎没有实现的效果键（只记一行日志，见 pluginTraits.js） */
+    reportUnimplementedTraits({ registry: this.registry, gd: this.gd, log: this.log });
     this.dispatcher = new EffectDispatcher(this, this.registry);
     this.BattleClass = typeof opts.BattleClass === 'function' ? opts.BattleClass : Battle;
     this.battleContent = opts.battleContent || 'full';
@@ -466,9 +472,19 @@ export class Match {
     // A match of up to five players gets a single group, i.e. exactly the pre-capacity shared pool.
     this.poolGroups = createPoolGroups(this.gd, this.order, { banned: bans.banned });
     this.playerPools = new Map(this.poolGroups.flatMap((g) => g.playerIds.map((id) => [id, g.pool])));
-    // Compatibility for diagnostics and whole-match scans; a player's own transaction always uses its group.
-    this.pool = this.poolGroups[0].pool;
-    this.itemPool = this.poolGroups[0].itemPool;
+    // Compatibility for diagnostics and whole-match scans; a player's own transaction always uses its group. The
+    // aliases read group 1 live (accessors, not copies): a test that swaps m.pool — whole-match games are one group —
+    // then edits the pool every seat actually draws from, so the per-group invariant below stays checkable.
+    Object.defineProperty(this, 'pool', {
+      configurable: true, enumerable: true,
+      get: () => this.poolGroups[0].pool,
+      set: (v) => { this.poolGroups[0].pool = v; },
+    });
+    Object.defineProperty(this, 'itemPool', {
+      configurable: true, enumerable: true,
+      get: () => this.poolGroups[0].itemPool,
+      set: (v) => { this.poolGroups[0].itemPool = v; },
+    });
     // 自选编队 (0.2.0): each human's slotted DIY pieces get their own stock — none for one whose bonds are all off this
     // match (player/diy.js initDiyStock); no randomness is drawn here
     const off = new Set([...bans.drawn, ...bans.staticOff]);
