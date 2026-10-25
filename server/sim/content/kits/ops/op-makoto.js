@@ -36,7 +36,7 @@
 //   the allies in range while it lasts.
 
 import { num, talentBb, skillRec, up } from '../shared/tier1.js';
-import { hasHp } from '../../../damage.js';
+import { hasHp } from '../../../attack.js';
 
 const S1 = 'skchr_makoto_1';
 const S2 = 'skchr_makoto_2';

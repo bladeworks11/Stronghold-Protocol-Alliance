@@ -6,43 +6,28 @@
 const str = (v) => (typeof v === 'string' && v ? v : null);
 const obj = (v) => (v && typeof v === 'object' ? v : null);
 
+/** Skin pictures belong to the effective operator, never the original chess of a stand-in / DIY slot. */
+function skinPicture(m, chess, skinId, field) {
+  if (!skinId) return null;
+  const id = chess?.charId || str(chess?.assets?.[field])?.replace(/_[12]$/, '');
+  const skin = m?.chars?.[id]?.skins?.[skinId];
+  const elite = chess?.isGolden || /_2$/.test(chess?.assets?.[field] || '');
+  return str(elite && skin?.[`${field}E2`]) || str(skin?.[field]) || (field === 'portrait' ? str(skin?.illust) : null);
+}
+
 /** @param {any} m manifest @param {string} key 'group/key' */
 export function uiUrl(m, key) {
   return str(obj(obj(m)?.ui)?.[key]);
 }
 
 /**
- * The picture a WORN skin ships for an operator (docs/SKINS.md): `chars[<charId>].skins[<skin>]` written by a cosmetic
- * plugin's overlay. Null when the skin has no such picture (the caller falls back to the operator's own art — a plugin
- * that replaced only the model must never leave a broken face).
- * @param {any} m manifest @param {any} charId an operator id, or its `_2` art id
- * @param {any} skin the skin key @param {'avatar'|'portrait'} kind @param {boolean} [golden] prefer the E2 picture
- */
-export function skinArtUrl(m, charId, skin, kind, golden = false) {
-  const chars = obj(obj(m)?.chars);
-  const id = str(charId);
-  const key = str(skin);
-  if (!chars || !id || !key) return null;
-  const base = chars[id] ? id : (id.endsWith('_2') && chars[id.slice(0, -2)] ? id.slice(0, -2) : null);
-  const rec = base ? chars[base] : null;
-  const s = rec && obj(rec.skins) ? rec.skins[key] : null;
-  if (!s) return null;
-  return (golden ? str(s[`${kind}E2`]) : null) || str(s[kind]) || null;
-}
-
-/**
- * Operator avatar for a chess record (golden → E2 art when present). `opts.skin` (a worn skin id) shows that skin's
- * avatar instead, when the manifest holds one.
+ * Operator avatar for a chess record (golden → E2 art when present).
  * @param {any} m manifest
  * @param {any} chess chess.json record (or { assets: { avatar } })
- * @param {{ skin?: string|null }} [opts]
  */
-export function chessAvatarUrl(m, chess, opts = null) {
-  const skin = str(opts && opts.skin);
-  if (skin) {
-    const art = skinArtUrl(m, chess?.charId, skin, 'avatar', !!chess?.isGolden);
-    if (art) return art;
-  }
+export function chessAvatarUrl(m, chess, { skin = null } = {}) {
+  const picture = skinPicture(m, chess, skin, 'avatar');
+  if (picture) return picture;
   const chars = obj(obj(m)?.chars);
   const id = str(chess?.assets?.avatar) || str(chess?.charId);
   if (!chars || !id) return null;
@@ -63,13 +48,10 @@ export function chessAvatarUrl(m, chess, opts = null) {
  * @param {any} m
  * @param {any} chess
  */
-export function chessPortraitUrl(m, chess, opts = null) {
+export function chessPortraitUrl(m, chess, { skin = null } = {}) {
+  const picture = skinPicture(m, chess, skin, 'portrait');
+  if (picture) return picture;
   const chars = obj(obj(m)?.chars);
-  const skin = str(opts && opts.skin);
-  if (skin) {
-    const art = skinArtUrl(m, chess?.charId, skin, 'portrait', !!chess?.isGolden);
-    if (art) return art;
-  }
   const id = str(chess?.assets?.portrait);
   if (!chars) return null;
   if (id) {
@@ -125,6 +107,12 @@ const PROF_KEY = {
 export function profIconUrl(m, profession) {
   const k = PROF_KEY[String(profession || '').toUpperCase()];
   return k ? str(obj(obj(obj(m)?.prof)?.icon)?.[k]) : null;
+}
+
+/** Square profession glyph (manifest `prof.large`: a black glyph on white, drawn as a white one by loadout.css). */
+export function profGlyphUrl(m, profession) {
+  const v = obj(obj(obj(m)?.prof)?.large)?.[String(profession || '').toLowerCase()];
+  return str(v);
 }
 
 /** Sub-profession icon from a chess record (`assets.subProfIcon` = 'sub_<id>_icon'). */

@@ -34,7 +34,7 @@
 //   The dash radius is not in any source [ASSUMED: the 溅射 1.0 convention].
 
 import { num, talentBb, traitBb, moduleBb, skillRec, up, toggleBuff } from '../shared/tier1.js';
-import { hasHp } from '../../../damage.js';
+import { hasHp } from '../../../attack.js';
 
 const S1 = 'skchr_yato2_1';
 const S2 = 'skchr_yato2_2';

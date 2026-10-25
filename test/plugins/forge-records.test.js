@@ -67,7 +67,7 @@ test('Forge maps every record kind, rewrites references, and names unsupported t
     effects: { effect: { buffs: [], params: {} } },
   };
   const notes = [], planned = planForgeRecords({ read: f => docs[f], table: f => data[f], allocate: (p, id) => `${p}_data_demo_${id}`, skip: (...args) => notes.push(args) });
-  assert.ok(notes.some(n => n[0] === 'traits:bad#effectKey' && n[2].includes('invented')));
+  // [ASSUMED] an unimplemented trait effect is kept as display-only data (the card shows its text, battle ignores it)\r\n  assert.ok(notes.some(n => n[0] === 'traits:bad#displayOnly' && n[2].includes('invented')));
   assert.ok(notes.some(n => n[0] === 'bands:bad#base/effectRef'));
   const rows = rewriteForgeIds(planned.records, planned.ids);
   const composed = expandGameplayRecords(data, rows, { pluginId: 'data-demo' });
@@ -78,6 +78,7 @@ test('Forge maps every record kind, rewrites references, and names unsupported t
   assert.deepEqual(grant.bbStr, { chess: 'item_x_data_demo_hook' });
   assert.deepEqual(rewriteForgeIds({ bb: { hook: 25 }, name: 'hook' }, planned.ids), { bb: { hook: 25 }, name: 'hook' });
   for (const [table, id] of [['bands', 'band_x_data_demo_band'], ['garrisons', 'garrison_x_data_demo_alias'], ['tokens', 'token_x_data_demo_token']]) assert.ok(composed.data[table][id]);
+  assert.equal(composed.data.garrisons.garrison_x_data_demo_bad.displayOnly, true);
 });
 
 test('importer derives a missing official chess pair from synthetic local tables and writes self-contained forms', t => {

@@ -569,6 +569,7 @@ export class DataSource {
       waves: asMap(unwrap(raw.waves, 'waves'), 'id') ?? {},
       backups: raw.backups && typeof raw.backups === 'object' && raw.backups.units ? raw.backups : null,
       effects: raw.effects && typeof raw.effects === 'object' ? raw.effects : null,
+      config: raw.config ?? null,
       // Tables a room's content set may add to (plugins/…): content helpers resolve them through `battleRecord()`.
       bonds: raw.bonds && typeof raw.bonds === 'object' ? raw.bonds : null,
       garrisons: raw.garrisons && typeof raw.garrisons === 'object' ? raw.garrisons : null,

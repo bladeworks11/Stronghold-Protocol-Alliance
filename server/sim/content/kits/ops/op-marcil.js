@@ -36,7 +36,7 @@
 //   for as long as the 魔力 lasts.
 
 import { num, talentBb, moduleBb, skillRec, up } from '../shared/tier1.js';
-import { hasHp } from '../../../damage.js';
+import { hasHp } from '../../../attack.js';
 
 const S1 = 'skchr_marcil_1';
 const S2 = 'skchr_marcil_2';

@@ -34,7 +34,7 @@
 //   (PRTS 备注 "先造成物理伤害，后造成法术伤害").
 
 import { num, talentBb, moduleBb, traitBb, skillRec, up, enemiesInGrid } from '../shared/tier1.js';
-import { hasHp } from '../../../damage.js';
+import { hasHp } from '../../../attack.js';
 
 const S1 = 'skchr_orchd2_1';
 const S2 = 'skchr_orchd2_2';
