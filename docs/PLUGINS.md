@@ -788,6 +788,18 @@ Supported files: enemies, waves, stages, modes, items, bands, garrisons, effects
   and `COL_SKILL_SELF_FRONT_LAYER`. They read the pack's own amounts (`gain`, `layer`, `count`, `kill_layers`,
   `bond_add_count`) and cap the battle with `max_count`; a record that names no bond gains the active bonds the operator
   carrying it belongs to [ASSUMED]. Every other key stays display-only, as above.
+- The per-layer readers and the two "meta" traits. `COL_EQUIP_BASE_BY_BOND_LAYER` (每 `divide_num` 层 +`add` 装备数值,
+  ASPD + 携带装备数 × `aspd_per_item` — the engine merges equipment into the operator's stats, so the increase lands on
+  its attributes [ASSUMED]), `custom_scale_bonds_layers` (每 `per_layers` 层 +`atk`) and
+  `act_gar_eff_takenReduceByBond` (每 `divide_num` 层 受到伤害 −`taken_reduce`, floored at 5 %) recompute on every layer
+  gain. `COL_SHIELD_AND_SKILL_LAYER` hands the operator and its eight neighbours `shield` (+1 per `shield_div` layers)
+  as shield charges at battle start and, on each skill, gives those neighbours +`layer` layers up to `max` times.
+  `SERVER_COPY_FRONT_EFFECT_BATTLE` runs the `IN_BATTLE` traits of the operator(s) within `front_count` tiles in front
+  of the holder as its own; `SERVER_EXTRA_TRIGGER_BATTLE_EFFECT` and `AVEMUJICA_EXTRA_TRIGGER` make another operator's
+  trait fire `extra_trigger` more times (at most `max_count` times per trait and operator), and a 丰川祥子 trigger
+  (`bbStr.partner`) also gives every 颂乐人偶 operator `partner_layers` layers once per battle [ASSUMED: the text says
+  每回合1次, a battle has no rounds]. `COL_DEPLOY_LAYER_NOREDEPLOY_EQUIP` only grants its layers: the battle cannot hand
+  equipment back to the prep phase, so its `item_tier` is ignored.
 - Bonds use `{ file: "bonds", id: "bond_x_<namespace>_<local>", value: { name, desc, thresholds,
   countMode, isCore?, identifier?, bondOrder?, iconId? } }`. `thresholds` is an ascending list of 1–16 positive
   integers, each at most 100 [ASSUMED]. `countMode` is `BOARD`, `BOARD_AND_DECK`, or `BOARD_ALL_CHESS`

@@ -1,6 +1,8 @@
 ## 未发布
 
 ### 新增
+
+- 插件自有特质键再补一批：`COL_EQUIP_BASE_BY_BOND_LAYER`、`custom_scale_bonds_layers`、`act_gar_eff_takenReduceByBond` 三个「每层读取器」（每层重算属性/减伤），`COL_SHIELD_AND_SKILL_LAYER`（护盾按 `shieldHits` 层数，技能最多 N 次给八格邻居加层），`SERVER_COPY_FRONT_EFFECT_BATTLE`（把身前干员的战斗中特质挂到自己身上）、`SERVER_EXTRA_TRIGGER_BATTLE_EFFECT` 与 `AVEMUJICA_EXTRA_TRIGGER`（额外触发 + 「partner」干员触发时给【颂乐人偶】全员加层，每场 1 次 [ASSUMED]）。装备基础值加成落在干员属性上 [ASSUMED]；`COL_DEPLOY_LAYER_NOREDEPLOY_EQUIP` 只发层数（战斗内没有把装备交回备战的通道，`item_tier` 忽略）。golden 46/22/21/10/151 全部一致。
 - 插件干员在战斗里的「加层」类特质现在真的生效了：卡兹戴尔、哥伦比亚、ave mujica 等包的 `custom_gain_first_skill`、`custom_gain_on_skill`、`custom_gain_on_heal`、`custom_gain_on_hurt_or_heal`、`custom_gain_on_kills`、`custom_gain_on_controlled`、`act_gar_event_onhurt_add_bond_layer`、`AVEMUJICA_FEVER_KILL`、`COL_START_OWN_BOND_NOACT`、`COL_DEPLOY_LAYER_NOREDEPLOY_EQUIP`、`COL_SKILL_SELF_FRONT_LAYER` 现在按各自黑板（`gain`／`layer`／`count`／`kill_layers`，`max_count` 封顶）在技能、治疗、受击、击杀、被控、部署、开战时给已激活的盟约加层；记录里没写盟约 id 时加在携带者自己的盟约上（[ASSUMED]）。以前这些只有卡片上的一行字。其余没实现的特质仍是只读文本，导入报告与 `[sim] … uses …` 日志会点名。并入 0.3.3 后 golden 也按新内容重算了一遍（diy 151 / standins 10 / matches 21 个场景全部一致，差异只来自内容本身）。
 - 房间插件面板把成对的包一起勾：勾选内容插件时会同时勾上它 `optional` 里点名、房间可用的配套外观（`scope` 含 `room` 的 `-look` 包）。以前房主要自己记得勾两次，只勾内容包时新干员能上阵但立绘、模型和语音是空的。取消内容插件时这套外观一起取消——另一个已启用的内容插件也点名同一套外观时保留；纯个人的配套外观不受影响，仍由每位博士在「设置 → 外观插件」里自己开关，面板照旧提示。规则为 [ASSUMED]，只改房主的勾选，不改服务端的解析与加载顺序。
 - 房间插件面板把同名的行排在一起、并说清是哪一种：一个包常常是三条——内容（数据）、`kits-*` 行为脚本、`-look` 外观，原来按插件 id 排，三行散在列表各处，看着像装重复了。现在按显示名分组，组内按 数据 → 脚本 → 外观 排；只有重名时才在名字后面用小字标出「· 数据/脚本/外观」。勾选内容插件时连它的 `kits-*` 脚本一起勾上（脚本的 `requires` 指向该内容包、`scope` 含 `room`、本服务器上状态为已加载时才带），取消时一起取消；单独勾脚本不带别的、已勾的不会被重复推入。规则为 [ASSUMED]，只改房主的勾选与列表顺序，不动服务端的解析与加载顺序。

@@ -140,12 +140,40 @@ export function install(battle) {
     if (!arr) { arr = []; by.set(it.key, arr); }
     arr.push(it);
   }
+  // SERVER_COPY_FRONT_EFFECT_BATTLE (rimbilliton 163): at battle start the operator also runs the IN_BATTLE traits of the
+  // operator(s) standing in front of it. Resolved here, on the home tiles, because the hook lists are fixed after this.
+  for (const it of all.slice()) {
+    if (it.key !== 'SERVER_COPY_FRONT_EFFECT_BATTLE') continue;
+    const span = Math.max(1, Math.round(S.num(it.bb.front_count, 1)));
+    for (let k = 1; k <= span; k++) {
+      const [fr, fc] = frontOf(it.unit.homeR, it.unit.homeC, it.unit.dir, k);
+      const src = opAtHome(battle, it.unit.ownerId, fr, fc);
+      if (!src || src === it.unit) continue;
+      for (const gid of garrisonIdsOf(src)) {
+        const g = S.battleRecord(battle, 'garrisons', gid);
+        if (!g || g.eventType !== 'IN_BATTLE') continue;
+        // the two "meta" keys look at other operators, copying them would only recurse
+        if (g.effectKey === 'SERVER_COPY_FRONT_EFFECT_BATTLE' || g.effectKey === 'SERVER_EXTRA_TRIGGER_BATTLE_EFFECT') continue;
+        add(it.unit, g, it);
+      }
+    }
+  }
+  for (const it of all) {
+    let arr = by.get(it.key);
+    if (!arr) { arr = []; by.set(it.key, arr); }
+    if (!arr.includes(it)) arr.push(it);
+  }
   for (const [key, list] of by) {
     const inst = INSTALLERS[key];
     if (inst) inst(battle, list);
   }
   installHitMods(battle, by);
   installReaders(battle, by);
+
+  const extras = [...(by.get('SERVER_EXTRA_TRIGGER_BATTLE_EFFECT') ?? EMPTY), ...(by.get('AVEMUJICA_EXTRA_TRIGGER') ?? EMPTY)];
+  if (extras.length) {
+    battle.__traitExtra = extras.map((it) => ({ it, bond: it.key === 'AVEMUJICA_EXTRA_TRIGGER', used: new Map(), given: false }));
+  }
 
   if (grants.length) {
     battle.on('battleStart', () => {
@@ -255,7 +283,44 @@ export function fireGain(battle, it) {
   });
   if (whole && added > 0) it.wholeUsed = (it.wholeUsed ?? 0) + n;
   if (added > 0) S.fxOn(battle, 'garrison', it.unit, `gar:${it.gid}`, it.key, { n: added });
+  if (added > 0) fireExtra(battle, it);
   return added;
+}
+
+/**
+ * "其他干员触发的“战斗中”类效果额外触发N次" (rimbilliton 165) and 【颂乐人偶】's extra trigger (ave mujica 181): a trait that
+ * fired for another operator fires again for each holder of one of these keys. Each holder repeats at most `max_count`
+ * times per (trait, operator); 丰川祥子's trigger also hands every 【颂乐人偶】 operator `partner_layers` layers — [ASSUMED]
+ * "每回合1次" is read as once per battle, the battle has no rounds.
+ */
+function fireExtra(battle, it) {
+  const list = battle.__traitExtra;
+  if (!list || it.__extra) return;
+  it.__extra = true;
+  try {
+    for (const h of list) {
+      const holder = h.it.unit;
+      if (!S.onField(holder) || holder === it.unit) continue;
+      if (h.bond && !S.unitBonds(it.unit).some((b) => /ave_mujica/i.test(b))) continue;
+      const at = `${it.gid}|${it.unit.id}`;
+      const max = Math.max(1, Math.round(S.num(h.it.bb.max_count, 1)));
+      const used = h.used.get(at) ?? 0;
+      if (used >= max) continue;
+      h.used.set(at, used + 1);
+      const times = Math.max(1, Math.round(S.num(h.it.bb.extra_trigger, 1)));
+      for (let i = 0; i < times; i++) fireGain(battle, it);
+      if (!h.bond || h.given) continue;
+      const partner = h.it.bbStr.partner;
+      const n = S.num(h.it.bb.partner_layers, 0);
+      if (!partner || !(n > 0) || !mentions(it.unit, partner)) continue;
+      h.given = true;
+      for (const m of battle.allyUnits) {
+        if (!S.isOp(m) || m.ownerId !== it.unit.ownerId || !S.onField(m)) continue;
+        if (!S.unitBonds(m).some((b) => /ave_mujica/i.test(b))) continue;
+        gainOwn(battle, h.it, m, n);
+      }
+    }
+  } finally { it.__extra = false; }
 }
 
 /**
@@ -270,6 +335,22 @@ function gainOwn(battle, it, unit, n) {
     playerId: unit.ownerId, bonds, n, requireActive: true, source: it.unit, reason: 'garrison',
     cap: it.cap, capKey: `${it.capKey}:${unit.id}`,
   });
+}
+
+/** Σ layers of the listed bonds (the holder's own bonds when the list is empty), active ones only. */
+function layerSum(battle, u, list) {
+  const bonds = list.length ? list : S.unitBonds(u);
+  let n = 0;
+  for (const b of bonds) if (S.bondActive(battle, u.ownerId, b)) n += S.bondLayers(battle, u.ownerId, b);
+  return n;
+}
+
+/** Does the unit's record mention `tag` (the packs name a partner operator by its codename)? */
+function mentions(u, tag) {
+  const t = String(tag ?? '').toLowerCase();
+  if (!t) return false;
+  const raw = u?.def?.raw;
+  return String(u?.defId ?? '').toLowerCase().includes(t) || (!!raw && JSON.stringify(raw).toLowerCase().includes(t));
 }
 
 const byUnit = (list) => {
@@ -519,6 +600,42 @@ const INSTALLERS = {
     });
   },
 
+  // COL_SHIELD_AND_SKILL_LAYER (columbia): <战斗开始时>自己与周围八格获得 `shield` 层护盾（可叠加，每 `shield_div` 层
+  // 【哥伦比亚】+1）; <战斗中>开启技能时让周围八格干员已激活盟约 +`layer` 层，至多 `max` 次。
+  COL_SHIELD_AND_SKILL_LAYER(battle, list) {
+    const m = byUnit(list);
+    battle.on('battleStart', () => {
+      for (const it of list) {
+        const u = it.unit;
+        if (!S.onField(u)) continue;
+        const steps = Math.floor(layerSum(battle, u, ids(it.bbStr.bond_id)) / Math.max(1, S.num(it.bb.shield_div, 20)));
+        const n = Math.round(S.num(it.bb.shield, 1)) + steps;
+        if (!(n > 0)) continue;
+        for (const t of [u, ...S.alliesAround(battle, u, S.N8)]) {
+          battle.addBuff(t, { key: `gar:${it.gid}:shield`, persist: true, visible: true, shieldHits: n });
+        }
+      }
+    });
+    battle.on('skillStart', ({ unit }) => {
+      const arr = m.get(unit);
+      if (!arr) return;
+      for (const it of arr) {
+        const max = S.num(it.bb.max, Infinity);
+        if ((it.shieldSkill ?? 0) >= max) continue;
+        it.shieldSkill = (it.shieldSkill ?? 0) + 1;
+        const n = S.num(it.bb.layer, 0);
+        if (!(n > 0)) continue;
+        for (const t of S.alliesAround(battle, it.unit, S.N8)) gainOwn(battle, it, t, n);
+      }
+    });
+  },
+
+  // the front copy runs in install() (on home tiles, before the hook lists are fixed); the two extra-trigger keys run
+  // from fireGain() via fireExtra(); their records themselves add nothing
+  SERVER_COPY_FRONT_EFFECT_BATTLE() {},
+  SERVER_EXTRA_TRIGGER_BATTLE_EFFECT() {},
+  AVEMUJICA_EXTRA_TRIGGER() {},
+
   GAIN_BUFF(battle, list) {
     for (const it of list) {
       const mods = {};
@@ -550,7 +667,48 @@ const INSTALLERS = {
 const READERS = new Set([
   'act1autochess_gar_eff_attrByBond', 'act1autochess_gar_eff_respawnTimeByBond',
   'act2autochess_gar_eff_attrByBond_add_onstart', 'act2autochess_gar_eff_ab_damageScaleByBond',
+  'COL_EQUIP_BASE_BY_BOND_LAYER', 'custom_scale_bonds_layers', 'act_gar_eff_takenReduceByBond',
 ]);
+
+/**
+ * The Forge packs' "每叠加N层" trait readers (their own keys): each recomputes a passive buff from the live layer count
+ * whenever a layer is gained. Their inputs can change without the layer count changing (the equipped items for
+ * COL_EQUIP_BASE_BY_BOND_LAYER), so they keep their own signature instead of the official `stepsOf` short-circuit.
+ */
+const AUTHORED_READERS = {
+  COL_EQUIP_BASE_BY_BOND_LAYER(battle, it) {
+    const u = it.unit;
+    const steps = Math.floor(layerSum(battle, u, ids(it.bbStr.bond_id)) / Math.max(1, S.num(it.bb.divide_num, 10)));
+    const add = S.num(it.bb.add, 0) * steps;
+    const aspd = Math.round(S.num(u.base?.aspd, 100) * S.num(it.bb.aspd_per_item, 0) * S.itemsOf(u).length);
+    const sig = `${steps}|${aspd}`;
+    if (sig === it.sig) return;
+    it.sig = sig;
+    const key = `gar:${it.gid}`;
+    if (!(steps > 0) && !(aspd > 0)) { battle.removeBuff(u, key); return; }
+    // [ASSUMED] "自身携带的装备基础数值增加X%": the engine merges equipment stats into the operator's own, so the
+    // increase is applied to its attributes rather than to the items alone.
+    S.passiveBuff(battle, u, key, { ...S.directMods({ atk: add, hp: add, def: add }), ...(aspd ? { aspd } : {}) });
+  },
+  custom_scale_bonds_layers(battle, it) {
+    const u = it.unit;
+    const steps = Math.floor(layerSum(battle, u, ids(it.bbStr.bonds)) / Math.max(1, S.num(it.bb.per_layers, 1)));
+    if (steps === it.sig) return;
+    it.sig = steps;
+    const key = `gar:${it.gid}`;
+    if (steps > 0) S.passiveBuff(battle, u, key, S.directMods({ atk: S.num(it.bb.atk, 0) * steps }));
+    else battle.removeBuff(u, key);
+  },
+  act_gar_eff_takenReduceByBond(battle, it) {
+    const u = it.unit;
+    const steps = Math.floor(layerSum(battle, u, ids(it.bbStr.bond_id)) / Math.max(1, S.num(it.bb.divide_num, 1)));
+    if (steps === it.sig) return;
+    it.sig = steps;
+    const key = `gar:${it.gid}`;
+    if (steps > 0) S.passiveBuff(battle, u, key, { dmgTakenMul: Math.max(0.05, 1 - S.num(it.bb.taken_reduce, 0) * steps) });
+    else battle.removeBuff(u, key);
+  },
+};
 
 /** floor(Σ layers of the listed active bonds / divide_num). */
 export function stepsOf(battle, it) {
@@ -570,6 +728,8 @@ function attrMods(bb, k) {
 }
 
 function applyReader(battle, it) {
+  const authored = AUTHORED_READERS[it.key];
+  if (authored) { authored(battle, it); return; }
   const k = stepsOf(battle, it);
   if (k === it.k) return;
   it.k = k;
