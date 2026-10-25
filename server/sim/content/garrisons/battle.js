@@ -850,3 +850,13 @@ function installHitMods(battle, by) {
     }, { priority: WEAKNESS_PRIORITY });
   }
 }
+
+/**
+ * The plugin trait effect keys this engine really runs in battle: the INSTALLERS, the per-layer readers and the two
+ * keys handled in install()/fireExtra. The match's trait report counts a key here as implemented, so a card's
+ * 「card text, engine does nothing」 verdict and the `[sim] … uses …` log stop naming them.
+ */
+export const BATTLE_TRAIT_KEYS = Object.freeze([
+  ...Object.keys(INSTALLERS), ...Object.keys(AUTHORED_READERS),
+  'SERVER_COPY_FRONT_EFFECT_BATTLE', 'SERVER_EXTRA_TRIGGER_BATTLE_EFFECT', 'AVEMUJICA_EXTRA_TRIGGER',
+]);

@@ -7,7 +7,11 @@
 // 按插件统计一次并写进日志，管理员能直接从 journalctl 看到「哪些特质本版本跑不了」。
 
 /** import-forge 给插件记录加的命名空间：`garrison_x_<包>_<原名>`、`chess_x_<包>_…`、`bond_x_…`。 */
+import { BATTLE_TRAIT_KEYS } from '../sim/content/garrisons/battle.js';
+
 const PLUGIN_RECORD_ID = /^[a-z]+_x_/;
+/** 本引擎在战斗侧已经实现的插件特质键（server/sim/content/garrisons/battle.js）。 */
+const BATTLE_KEYS = new Set(BATTLE_TRAIT_KEYS);
 
 /** garrison ids 与效果键（插件带来的记录用 id 前缀区分，见 constants）。 */
 function pluginGarrisons(gd) {
@@ -28,7 +32,7 @@ function pluginGarrisons(gd) {
 export function unimplementedTraitKeys(registry, gd) {
   const missing = new Map();
   for (const [id, g] of pluginGarrisons(gd)) {
-    if (!registry || !registry.has(`garrison:${g.effectKey}`)) {
+    if (!BATTLE_KEYS.has(g.effectKey) && (!registry || !registry.has(`garrison:${g.effectKey}`))) {
       const list = missing.get(g.effectKey) ?? [];
       list.push(id);
       missing.set(g.effectKey, list);

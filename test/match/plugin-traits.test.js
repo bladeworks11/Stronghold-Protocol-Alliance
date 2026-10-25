@@ -14,7 +14,9 @@ test('pluginTraits: engine keys are not reported, pack-private keys are', () => 
     garrison_x_demo_c: { effectKey: 'custom_gain_on_kills' },
     garrison_12_a: { effectKey: 'neitherKey' },
   });
-  assert.deepEqual(unimplementedTraitKeys(registry, data).sort(), ['COL_GAIN_RANDOM_EQUIP', 'custom_gain_on_kills']);
+  // `custom_gain_on_kills` is one of the battle-side keys the engine now runs (BATTLE_TRAIT_KEYS), so only the
+  // pack-private key with no implementation is reported.
+  assert.deepEqual(unimplementedTraitKeys(registry, data).sort(), ['COL_GAIN_RANDOM_EQUIP']);
 });
 
 test('pluginTraits: the match log gets one line naming the first keys', () => {
