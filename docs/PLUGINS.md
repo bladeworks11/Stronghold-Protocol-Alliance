@@ -780,6 +780,14 @@ Supported files: enemies, waves, stages, modes, items, bands, garrisons, effects
   instead made whole plugin rosters look like they had no traits. Choices use
   `{ file: "choices", id: "effect_x_data_demo_card", kind: "tactic" | "bounty", base: <card effectId>, set?, effect? }`:
   the new card and its cloned effect are added together. New bond behavior uses prep DSL, member DSL talents (§12), or a script plugin (§13).
+- The Forge traits this engine does run. Prep (`server/sim/content/garrisons/meta.js`): `COL_ADD_BOND_BY_EQUIP_COUNT`,
+  `COL_GAIN_RANDOM_EQUIP`, `SERVER_ADD_ACT_BOND_LAYER_BY_BOARD_BOND_CHAR`, `custom_gain_layers_prep_end_by_tiers`.
+  Battle (`server/sim/content/garrisons/battle.js`): `act_gar_event_onhurt_add_bond_layer`, `AVEMUJICA_FEVER_KILL`,
+  `custom_gain_first_skill`, `custom_gain_on_skill`, `custom_gain_on_heal`, `custom_gain_on_hurt_or_heal`,
+  `custom_gain_on_kills`, `custom_gain_on_controlled`, `COL_START_OWN_BOND_NOACT`, `COL_DEPLOY_LAYER_NOREDEPLOY_EQUIP`
+  and `COL_SKILL_SELF_FRONT_LAYER`. They read the pack's own amounts (`gain`, `layer`, `count`, `kill_layers`,
+  `bond_add_count`) and cap the battle with `max_count`; a record that names no bond gains the active bonds the operator
+  carrying it belongs to [ASSUMED]. Every other key stays display-only, as above.
 - Bonds use `{ file: "bonds", id: "bond_x_<namespace>_<local>", value: { name, desc, thresholds,
   countMode, isCore?, identifier?, bondOrder?, iconId? } }`. `thresholds` is an ascending list of 1–16 positive
   integers, each at most 100 [ASSUMED]. `countMode` is `BOARD`, `BOARD_AND_DECK`, or `BOARD_ALL_CHESS`

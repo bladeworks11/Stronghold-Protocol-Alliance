@@ -49,6 +49,13 @@ const EMPTY = Object.freeze([]);
 /** Status keys for check_ab_flag values used by the data (16 = 冻结). */
 const AB_FLAG_STATUS = Object.freeze({ 16: 'freeze' });
 
+/**
+ * The Forge packs bring their own trait keys (COL_*, custom_*, AVEMUJICA_*, act_gar_*). They mean the same thing
+ * the official layer keys mean — "为已激活的【X】增加N层" — but spell the amounts in `gain` / `layer` / `count` and
+ * name the bond in the text instead of in bbStr; docs/PLUGINS.md §16 lists what the engine runs.
+ */
+const AUTHORED_KEY = /^(COL_|custom_|AVEMUJICA_|act_gar_)/;
+
 function garrisonIdsOf(u) {
   const list = u?.def?.raw?.garrisonIds ?? u?.def?.garrisonIds;
   return Array.isArray(list) ? list : EMPTY;
@@ -85,6 +92,9 @@ function farToothGrants() {
 // install
 
 export function install(battle) {
+  // Installing twice would register every hook twice (and double every layer gain), so the second call is a no-op.
+  if (battle.__garrisonsInstalled) return;
+  battle.__garrisonsInstalled = true;
   const all = [];
   const owned = new Map(); // unit → Set(garrisonId)
   const add = (unit, g, grantedBy = null) => {
@@ -93,7 +103,10 @@ export function install(battle) {
     if (set.has(g.garrisonId)) return null;
     set.add(g.garrisonId);
     const bb = g.bb || {};
-    const cap = S.num(bb.max_add_count_per_battle, 0) > 0 ? S.num(bb.max_add_count_per_battle) : Infinity;
+    // The packs cap their traits with `max_count` (per battle); the official records with max_add_count_per_battle.
+    const cap = S.num(bb.max_add_count_per_battle, 0) > 0
+      ? S.num(bb.max_add_count_per_battle)
+      : (AUTHORED_KEY.test(g.effectKey || '') && S.num(bb.max_count, 0) > 0 ? S.num(bb.max_count) : Infinity);
     const it = {
       unit, g, gid: g.garrisonId, key: g.effectKey, bb, bbStr: g.bbStr || {}, grantedBy,
       cap, capKey: `gar:${g.garrisonId}:${unit.id}`, cnt: 0, k: -1,
@@ -186,7 +199,13 @@ function targetBonds(battle, it) {
   switch (it.bbStr.bond_type) {
     case 'bond_self': return S.unitBonds(u).filter((b) => S.bondActive(battle, u.ownerId, b));
     case 'bond_actived_maxstack': { const b = S.topActiveBond(battle, u.ownerId); return b ? [b] : EMPTY; }
-    default: return ids(it.bbStr.bond_id);
+    default: {
+      const named = ids(it.bbStr.bond_id);
+      // [ASSUMED] A Forge trait that names no bond at all ("使已激活的【X】层数+N") means the bonds the operator
+      // carrying it belongs to: the packs write the bond in the text, not in bbStr (docs/PLUGINS.md §16).
+      if (named.length || !AUTHORED_KEY.test(it.key || '')) return named;
+      return S.unitBonds(u).filter((b) => S.bondActive(battle, u.ownerId, b));
+    }
   }
 }
 
@@ -195,7 +214,12 @@ function amountOf(battle, it) {
   switch (it.bbStr.bond_add_type) {
     case 'by_charcount_samerow': return S.rowMates(battle, it.unit).length * S.num(bb.bond_add_count_multi, S.num(bb.bond_add_count, 1));
     case 'by_charlevel': return S.tierOf(it.unit) * S.num(bb.bond_add_count, 1);
-    default: return S.num(bb.bond_add_count, 0);
+    default: {
+      // The Forge packs count in `gain` / `layer` / `count` / `kill_layers`; the official records use `bond_add_count`.
+      if (Number.isFinite(bb.bond_add_count)) return bb.bond_add_count;
+      for (const k of ['gain', 'layer', 'count', 'kill_layers']) if (Number.isFinite(bb[k])) return bb[k];
+      return 0;
+    }
   }
 }
 
@@ -232,6 +256,20 @@ export function fireGain(battle, it) {
   if (whole && added > 0) it.wholeUsed = (it.wholeUsed ?? 0) + n;
   if (added > 0) S.fxOn(battle, 'garrison', it.unit, `gar:${it.gid}`, it.key, { n: added });
   return added;
+}
+
+/**
+ * The same layer gain for another operator of the holder's player (COL_SKILL_SELF_FRONT_LAYER's "身前"): the bond the
+ * trait names is a bond of the holder's player, so the neighbour gains that bond when it is active on the board.
+ */
+function gainOwn(battle, it, unit, n) {
+  if (!unit || !(n > 0)) return 0;
+  const bonds = S.unitBonds(unit).filter((b) => S.bondActive(battle, unit.ownerId, b));
+  if (!bonds.length) return 0;
+  return S.gainLayers(battle, {
+    playerId: unit.ownerId, bonds, n, requireActive: true, source: it.unit, reason: 'garrison',
+    cap: it.cap, capKey: `${it.capKey}:${unit.id}`,
+  });
 }
 
 const byUnit = (list) => {
@@ -381,6 +419,102 @@ const INSTALLERS = {
         if (h.ownerId !== ctx.playerId || !S.onField(h)) continue;
         if (it.bbStr.range_id && it.bbStr.range_id !== '1-1') continue;
         if (sourceInFront(h, ctx.source, ctx.tile)) ctx.n += S.num(it.bb.extra_cnt, 0);
+      }
+    });
+  },
+
+  // -- Forge packs: "为已激活的【X】增加N层" on the event their own trait names ------------------------------------
+  act_gar_event_onhurt_add_bond_layer(battle, list) {
+    battle.on('damaged', ({ target }) => {
+      for (const it of list) if (target === it.unit) fireGain(battle, it);
+    });
+  },
+
+  AVEMUJICA_FEVER_KILL(battle, list) {
+    battle.on('kill', ({ killer, victim }) => {
+      if (!killer || !victim) return;
+      for (const it of list) if (killer === it.unit) fireGain(battle, it);
+    });
+  },
+
+  custom_gain_first_skill(battle, list) {
+    const m = byUnit(list);
+    for (const it of list) it.once = false;
+    battle.on('skillStart', ({ unit }) => {
+      const arr = m.get(unit);
+      if (!arr) return;
+      for (const it of arr) if (!it.once) { it.once = true; fireGain(battle, it); }
+    });
+  },
+
+  custom_gain_on_skill(battle, list) {
+    const m = byUnit(list);
+    battle.on('skillStart', ({ unit }) => {
+      const arr = m.get(unit);
+      if (arr) for (const it of arr) fireGain(battle, it);
+    });
+  },
+
+  custom_gain_on_heal(battle, list) {
+    battle.on('heal', ({ source }) => {
+      for (const it of list) if (source === it.unit) fireGain(battle, it);
+    });
+  },
+
+  custom_gain_on_hurt_or_heal(battle, list) {
+    battle.on('damaged', ({ target }) => {
+      for (const it of list) if (target === it.unit) fireGain(battle, it);
+    });
+    battle.on('heal', ({ source }) => {
+      for (const it of list) if (source === it.unit) fireGain(battle, it);
+    });
+  },
+
+  custom_gain_on_kills(battle, list) {
+    battle.on('kill', ({ killer, victim }) => {
+      if (!killer || !victim) return;
+      for (const it of list) {
+        if (killer !== it.unit) continue;
+        it.cnt++;
+        if (it.cnt % Math.max(1, S.num(it.bb.per_kills, 1)) === 0) fireGain(battle, it);
+      }
+    });
+  },
+
+  custom_gain_on_controlled(battle, list) {
+    // "被控制时": a new control entering the operator (a refresh is not a new one, engine ctx.entered).
+    const CONTROL = new Set(['stun', 'freeze', 'sleep', 'palsy', 'fear']);
+    battle.on('statusApplied', ({ target, status, entered }) => {
+      if (!entered || !CONTROL.has(status)) return;
+      for (const it of list) if (target === it.unit) fireGain(battle, it);
+    });
+  },
+
+  COL_START_OWN_BOND_NOACT(battle, list) {
+    if (!list.length) return;
+    battle.on('battleStart', () => { for (const it of list) if (S.onField(it.unit)) fireGain(battle, it); });
+  },
+
+  COL_DEPLOY_LAYER_NOREDEPLOY_EQUIP(battle, list) {
+    const m = byUnit(list);
+    battle.on('deploy', ({ unit }) => {
+      const arr = m.get(unit);
+      if (arr) for (const it of arr) fireGain(battle, it);
+    });
+  },
+
+  COL_SKILL_SELF_FRONT_LAYER(battle, list) {
+    const m = byUnit(list);
+    battle.on('skillStart', ({ unit }) => {
+      const arr = m.get(unit);
+      if (!arr) return;
+      for (const it of arr) {
+        fireGain(battle, it);
+        // "自身与身前" — the operator in front of it shares the gain.
+        const u = it.unit;
+        const [fr, fc] = frontOf(u.tileR, u.tileC, u.dir);
+        const front = opAtHome(battle, u.ownerId, fr, fc);
+        if (front && front !== u) gainOwn(battle, it, front, amountOf(battle, it));
       }
     });
   },
